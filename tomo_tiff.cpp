@@ -70,8 +70,8 @@ void tomo_tiff::save(const char* address){
 
     if(this->bits_per_sample_ == 16 && this->samples_per_pixel_ == 1){
         vector<uint16_t> data;
-        for(int i=0;i<this->height_;++i){
-            for(int j=0;j<this->width_;++j){
+        for(unsigned int i=0;i<this->height_;++i){
+            for(unsigned int j=0;j<this->width_;++j){
                 data.push_back( gray_scale_[i][j] * 65535.0 );
             }
         }
