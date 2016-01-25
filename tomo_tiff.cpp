@@ -13,6 +13,7 @@ tomo_tiff::tomo_tiff(const char* address){
     TIFFGetField(tif, TIFFTAG_SAMPLESPERPIXEL, &this->samples_per_pixel_);
 
     //init
+    this->address_ = string(address);
     this->gray_scale_.resize(this->height_);
     for(int i=0;i<this->height_;++i){
         this->gray_scale_[i].resize(this->width_,0.0);
@@ -83,5 +84,34 @@ void tomo_tiff::save(const char* address){
     }
 
     TIFFClose(tif);
+    return;
+}
+
+tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
+
+    fstream in_filelist(address_filelist,fstream::in);
+
+    int size_tiffs = -1;
+    char prefix[50]={0};
+    char original_dir[50]={0};
+    getcwd(original_dir,50);
+
+    in_filelist >> size_tiffs;
+    in_filelist >> prefix;
+    cout << "change working directory to " << prefix <<endl;
+    this->prefix_ = string(prefix);
+    chdir(prefix);
+
+    this->tiffs_.resize(size_tiffs);
+    for(int i=0;i<size_tiffs;++i){
+        char address_buffer[100];
+        in_filelist >> address_buffer;
+        (cout << "reading " << address_buffer ).flush();
+        tiffs_[i] = tomo_tiff(address_buffer);
+        cout << "\t\t\tdone!" <<endl;
+    }
+
+    cout << "change working directory back to " << original_dir <<endl;
+    chdir(original_dir);
     return;
 }
