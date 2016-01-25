@@ -92,9 +92,10 @@ tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
     fstream in_filelist(address_filelist,fstream::in);
 
     int size_tiffs = -1;
-    char prefix[50]={0};
-    char original_dir[50]={0};
-    getcwd(original_dir,50);
+    char prefix[100]={0};
+    char original_dir[100]={0};
+    getcwd(original_dir,100);
+    cout << original_dir << endl;
 
     in_filelist >> size_tiffs;
     in_filelist >> prefix;
