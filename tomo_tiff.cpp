@@ -15,20 +15,20 @@ tomo_tiff::tomo_tiff(const char* address){
     //init
     this->address_ = string(address);
     this->gray_scale_.resize(this->height_);
-    for(int i=0;i<this->height_;++i){
+    for(unsigned int i=0;i<this->height_;++i){
         this->gray_scale_[i].resize(this->width_,0.0);
     }
 
     //read raw-data
     unsigned int line_size = TIFFScanlineSize(tif);
     char* buf = new char[ line_size * this->height_];
-    for(int i=0;i<this->height_;++i){
+    for(unsigned int i=0;i<this->height_;++i){
         TIFFReadScanline( tif, &buf[i*line_size], i );
     }
 
     if(this->bits_per_sample_ == 16 && this->samples_per_pixel_ == 1){
-        for(int i=0;i<this->height_;++i){
-            for(int j=0;j<this->width_;++j){
+        for(unsigned int i=0;i<this->height_;++i){
+            for(unsigned int j=0;j<this->width_;++j){
                 this->gray_scale_[i][j] = (float)((uint16_t*)buf)[ i*this->width_ + j ] / 65535.0;
             }
         }
@@ -87,32 +87,85 @@ void tomo_tiff::save(const char* address){
     return;
 }
 
+void tomo_super_tiff::make_gaussian_window_(const int size, const float standard_deviation){
+
+    //init
+    this->gaussian_window.resize(size);
+    for(int i=0;i<size;++i){
+        this->gaussian_window[i].resize(size);
+        for(int j=0;j<size;++j){
+            this->gaussian_window[i][j].resize(size,0.0);
+        }
+    }
+
+    //sd : standard_deviation
+    //g(x,y,z) = N * exp[ -(x^2 + y^2 + z^2)/sd^2 ];
+    //where N = 1 / ( sd^3 * (2pi)^(3/2) )
+
+    //make N first
+    float N = 1.0 / ( pow(standard_deviation,3) * pow( (2.0 * M_PI), 1.5 ) );
+
+    //do g(x,y,z)
+    for(int i=0;i<size;++i){
+        for(int j=0;j<size;++j){
+            for(int k=0;k<size;++k){
+
+                float fi = (float)i;
+                float fj = (float)j;
+                float fk = (float)k;
+
+                float exp_part = -( fi*fi + fj*fj + fk*fk ) / (standard_deviation*standard_deviation);
+                gaussian_window[i][j][k] = N * exp(exp_part);
+            }
+        }
+    }
+    return;
+}
+
+const vector<float>& tomo_tiff::operator [](int index_i)const{
+    return this->gray_scale_[index_i];
+}
+
 tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
 
     fstream in_filelist(address_filelist,fstream::in);
 
     int size_tiffs = -1;
+    vector<string> addresses;
     char prefix[100]={0};
     char original_dir[100]={0};
     getcwd(original_dir,100);
-    cout << original_dir << endl;
 
     in_filelist >> size_tiffs;
     in_filelist >> prefix;
+    //read filelist first for parallel
+    addresses.resize(size_tiffs);
+    for(int i=0;i<size_tiffs;++i){
+        in_filelist >> addresses[i];
+    }
+
     cout << "change working directory to " << prefix <<endl;
     this->prefix_ = string(prefix);
     chdir(prefix);
 
+    int number_done = 0;
     this->tiffs_.resize(size_tiffs);
+#pragma omp parallel for
     for(int i=0;i<size_tiffs;++i){
-        char address_buffer[100];
-        in_filelist >> address_buffer;
-        (cout << "reading " << address_buffer ).flush();
-        tiffs_[i] = tomo_tiff(address_buffer);
-        cout << "\t\t\tdone!" <<endl;
+        tiffs_[i] = tomo_tiff(addresses[i].c_str());
+        cout << "reading " << addresses[i] << "\t\t\tdone!\t\t" << number_done <<endl;
+    #pragma omp critical
+        {
+            number_done++;
+        }
     }
 
     cout << "change working directory back to " << original_dir <<endl;
     chdir(original_dir);
+    return;
+}
+
+void tomo_super_tiff::neuron_detection(int window_size){
+    this->make_gaussian_window_(50,3.0);
     return;
 }

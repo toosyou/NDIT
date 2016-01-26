@@ -10,6 +10,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <cstdio>
+#include <cstdlib>
+#include <math.h>
+
+#include <omp.h>
 
 using namespace std;
 
@@ -45,16 +50,20 @@ public:
     tomo_tiff(const char* address);
 
     void save(const char* address);
+    const vector<float>& operator [](int index_i)const;
 };
 
 class tomo_super_tiff{
 
     string prefix_;
     vector<tomo_tiff> tiffs_;
+    vector< vector< vector<float> > > gaussian_window;
+    void make_gaussian_window_(const int size, const float standard_deviation);
 
 public:
 
     tomo_super_tiff(const char* address_filelist);
+    void neuron_detection(int window_size);
 };
 
 #endif // TOMO_TIFF
