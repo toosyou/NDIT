@@ -102,6 +102,8 @@ void tomo_super_tiff::make_gaussian_window_(const int size, const float standard
     //g(x,y,z) = N * exp[ -(x^2 + y^2 + z^2)/sd^2 ];
     //where N = 1 / ( sd^3 * (2pi)^(3/2) )
 
+    float maximum = 0.0;
+
     //make N first
     float N = 1.0 / ( pow(standard_deviation,3) * pow( (2.0 * M_PI), 1.5 ) );
 
@@ -110,15 +112,38 @@ void tomo_super_tiff::make_gaussian_window_(const int size, const float standard
         for(int j=0;j<size;++j){
             for(int k=0;k<size;++k){
 
-                float fi = (float)i;
-                float fj = (float)j;
-                float fk = (float)k;
+                float fi = (float)i - (float)size / 2.0;
+                float fj = (float)j - (float)size / 2.0;
+                float fk = (float)k - (float)size / 2.0;
 
                 float exp_part = -( fi*fi + fj*fj + fk*fk ) / (standard_deviation*standard_deviation);
                 gaussian_window[i][j][k] = N * exp(exp_part);
+                maximum = max( maximum, gaussian_window[i][j][k] );
             }
         }
     }
+
+    //normalize maximum of gaussian_window to 1
+    float ratio = 1/maximum;
+    for(int i=0;i<size;++i){
+        for(int j=0;j<size;++j){
+            for(int k=0;k<size;++k){
+                gaussian_window[i][j][k] *= ratio;
+            }
+        }
+    }
+
+    //output test
+    mkdir("gaussian",0755);
+    string prefix_test("gaussian/");
+    for(int i=0;i<size;++i){
+        tomo_tiff test_tiff( this->gaussian_window[i] );
+        char number_string[50];
+        sprintf(number_string,"%d",i);
+        string address_test = prefix_test+string(number_string)+string(".tiff");
+        test_tiff.save( address_test.c_str() );
+    }
+
     return;
 }
 
@@ -166,6 +191,6 @@ tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
 }
 
 void tomo_super_tiff::neuron_detection(int window_size){
-    this->make_gaussian_window_(50,3.0);
+    this->make_gaussian_window_(50,25.0);
     return;
 }

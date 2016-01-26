@@ -12,11 +12,13 @@
 #include <fcntl.h>
 #include <cstdio>
 #include <cstdlib>
-#include <math.h>
+#include <cmath>
 
 #include <omp.h>
 
 using namespace std;
+
+class tomo_super_tiff;
 
 class tomo_tiff{
 
@@ -46,11 +48,20 @@ public:
         this->samples_per_pixel_ = -1;
         this->gray_scale_.clear();
     }
+    tomo_tiff(vector< vector<float> >& data){
+        this->gray_scale_ = data;
+        this->height_ = data.size();
+        this->width_ = data[0].size();
+        this->bits_per_sample_ = 16;
+        this->samples_per_pixel_ = 1;
+    }
 
     tomo_tiff(const char* address);
 
     void save(const char* address);
     const vector<float>& operator [](int index_i)const;
+
+    friend class tomo_super_tiff;
 };
 
 class tomo_super_tiff{
