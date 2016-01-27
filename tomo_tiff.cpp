@@ -87,6 +87,10 @@ void tomo_tiff::save(const char* address){
     return;
 }
 
+const vector<float>& tomo_tiff::operator [](int index_y)const{
+    return this->gray_scale_[index_y];
+}
+
 void tomo_super_tiff::make_gaussian_window_(const int size, const float standard_deviation){
 
     //init
@@ -103,6 +107,7 @@ void tomo_super_tiff::make_gaussian_window_(const int size, const float standard
     //where N = 1 / ( sd^3 * (2pi)^(3/2) )
 
     float maximum = 0.0;
+    float summation = 0.0;
 
     //make N first
     float N = 1.0 / ( pow(standard_deviation,3) * pow( (2.0 * M_PI), 1.5 ) );
@@ -118,26 +123,37 @@ void tomo_super_tiff::make_gaussian_window_(const int size, const float standard
 
                 float exp_part = -( fi*fi + fj*fj + fk*fk ) / (standard_deviation*standard_deviation);
                 gaussian_window[i][j][k] = N * exp(exp_part);
+                //maximum = max( maximum, gaussian_window[i][j][k] );
+                summation += gaussian_window[i][j][k];
+            }
+        }
+    }
+
+    //normalize the summation of gaussian_window to 1.0
+    float ratio = 1.0/summation;
+    for(int i=0;i<size;++i){
+        for(int j=0;j<size;++j){
+            for(int k=0;k<size;++k){
+                gaussian_window[i][j][k] *= ratio;
                 maximum = max( maximum, gaussian_window[i][j][k] );
             }
         }
     }
 
-    //normalize maximum of gaussian_window to 1
-    float ratio = 1/maximum;
+    //normalize the maximum to 1 for output
+    float normalize_ratio = 1.0 / maximum;
+    vector< vector< vector<float> > >output_test( gaussian_window );
     for(int i=0;i<size;++i){
         for(int j=0;j<size;++j){
             for(int k=0;k<size;++k){
-                gaussian_window[i][j][k] *= ratio;
+                output_test[i][j][k] *= normalize_ratio;
             }
         }
     }
-
-    //output test
     mkdir("gaussian",0755);
     string prefix_test("gaussian/");
     for(int i=0;i<size;++i){
-        tomo_tiff test_tiff( this->gaussian_window[i] );
+        tomo_tiff test_tiff( output_test[i] );
         char number_string[50];
         sprintf(number_string,"%d",i);
         string address_test = prefix_test+string(number_string)+string(".tiff");
@@ -147,9 +163,6 @@ void tomo_super_tiff::make_gaussian_window_(const int size, const float standard
     return;
 }
 
-const vector<float>& tomo_tiff::operator [](int index_i)const{
-    return this->gray_scale_[index_i];
-}
 
 tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
 
@@ -190,7 +203,103 @@ tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
     return;
 }
 
-void tomo_super_tiff::neuron_detection(int window_size){
-    this->make_gaussian_window_(50,25.0);
+float tomo_super_tiff::Ix_(int x, int y, int z){
+    if( x+1 >= this->tiffs_[z][y].size() )
+        return this->tiffs_[z][y][x] - this->tiffs_[z][y][x-1];
+    else if( x-1 < 0)
+        return this->tiffs_[z][y][x+1] - this->tiffs_[z][y][x];
+    else
+        return ( this->tiffs_[z][y][x+1] - this->tiffs_[z][y][x-1] ) / 2.0;
+}
+
+float tomo_super_tiff::Iy_(int x, int y, int z){
+    if( y+1 >= this->tiffs_[z].size() )
+        return this->tiffs_[z][y][x] - this->tiffs_[z][y-1][x];
+    else if( y-1 < 0)
+        return this->tiffs_[z][y+1][x] - this->tiffs_[z][y][x];
+    else
+        return ( this->tiffs_[z][y+1][x] - this->tiffs_[z][y-1][x] ) / 2.0;
+}
+
+float tomo_super_tiff::Iz_(int x, int y, int z){
+    if( z+1 >= this->tiffs_.size() )
+        return this->tiffs_[z][y][x] - this->tiffs_[z-1][y][x];
+    else if( z-1 < 0)
+        return this->tiffs_[z+1][y][x] - this->tiffs_[z][y][x];
+    else
+        return ( this->tiffs_[z+1][y][x] - this->tiffs_[z-1][y][x] ) / 2.0;
+}
+
+void tomo_super_tiff::make_differential_matrix(){
+
+    //init
+    cout << endl << "Initializing, trying to allocate memory..." <<endl ;
+    int process = 0;
+    differential_matrix.resize(this->tiffs_.size());
+#pragma omp parallel for
+    for(int i=0;i<differential_matrix.size();++i){
+        this->differential_matrix[i].resize(this->tiffs_[i].size());
+        for(int j=0;j<differential_matrix[i].size();++j){
+            differential_matrix[i][j].resize(this->tiffs_[i][j].size(),matrix(3,0));
+        }
+        cout << process << " / " << differential_matrix.size() <<endl;
+#pragma omp critical
+        {
+            process++;
+        }
+    }
+    cout << "done!" <<endl;
+
+    /* differential_matrix      j->
+     * __                           __
+     * |    IxIx    IxIy    IxIz     |  i
+     * |                             |  |
+     * |    IxIy    IyIy    IyIz     |  v
+     * |                             |
+     * |    IxIz    IyIz    IzIz     |
+     * L_                           _|
+     */
+
+    cout << "calculating differential matrixes..." <<endl;
+    process = 0;
+#pragma omp parallel for
+    for(int z=0;z<this->tiffs_.size();++z){
+        for(int y=0;y<this->tiffs_[z].size();++y){
+            for(int x=0;x<this->tiffs_[z][y].size();++x){
+
+                matrix &this_matrix = differential_matrix[z][y][x];
+                float Ix = this->Ix_(x,y,z);
+                float Iy = this->Iy_(x,y,z);
+                float Iz = this->Iz_(x,y,z);
+
+                this_matrix[0][0] = Ix*Ix;
+                this_matrix[1][1] = Iy*Iy;
+                this_matrix[2][2] = Iz*Iz;
+
+                this_matrix[0][1] = this_matrix[1][0] = Ix*Iy;
+                this_matrix[0][2] = this_matrix[2][0] = Ix*Iz;
+                this_matrix[1][2] = this_matrix[2][1] = Iy*Iz;
+            }
+        }
+        cout << process << " / " << this->tiffs_.size() <<endl;
+#pragma omp critical
+        {
+            process++;
+        }
+    }
+}
+
+void tomo_super_tiff::neuron_detection(const int window_size, const float standard_deviation){
+
+    cout << "making gaussian window with window_size : " << window_size;
+    (cout << "\tstandard_deviation : " << standard_deviation ).flush();
+
+    this->make_gaussian_window_(window_size,standard_deviation);
+    cout << "\tdone!"<<endl;
+
+    (cout << "making differential matrix..." ).flush();
+    this->make_differential_matrix();
+    cout << "done!"<<endl;
+
     return;
 }

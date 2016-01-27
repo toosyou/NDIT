@@ -10,6 +10,5 @@ int main(int argc, char **argv){
 
     tomo_super_tiff sample((char*)argv[1]);
     sample.neuron_detection(50);
-    cout << "it works" <<endl;
     return 0;
 }

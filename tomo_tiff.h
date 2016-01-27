@@ -59,22 +59,52 @@ public:
     tomo_tiff(const char* address);
 
     void save(const char* address);
-    const vector<float>& operator [](int index_i)const;
+    const vector<float>& operator [](int index_y)const;
+    int size(void){return this->gray_scale_.size();}
 
     friend class tomo_super_tiff;
+};
+
+class matrix{
+
+    vector< vector<float> > number_;
+
+public:
+
+    matrix(const int size = 0, const float number = 0.0){
+        this->resize(size,number);
+    }
+
+    vector<float>& operator [](const int index_i){
+        return this->number_[index_i];
+    }
+    void resize(const int size,const float number = 0.0){
+        this->number_.resize(size);
+        for(int i=0;i<size;++i){
+            this->number_[i].resize(size,number);
+        }
+    }
+
 };
 
 class tomo_super_tiff{
 
     string prefix_;
-    vector<tomo_tiff> tiffs_;
+    vector<tomo_tiff> tiffs_;//[z][y][x]
     vector< vector< vector<float> > > gaussian_window;
+    vector< vector< vector<matrix> > >differential_matrix;
+    vector< vector< vector<matrix> > >tensor;
+
     void make_gaussian_window_(const int size, const float standard_deviation);
+    void make_differential_matrix();
+    float Ix_(int x, int y, int z);
+    float Iy_(int x, int y, int z);
+    float Iz_(int x, int y, int z);
 
 public:
 
     tomo_super_tiff(const char* address_filelist);
-    void neuron_detection(int window_size);
+    void neuron_detection(const int window_size, const float standard_deviation=0.8);
 };
 
 #endif // TOMO_TIFF
