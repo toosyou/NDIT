@@ -84,19 +84,43 @@ public:
             this->number_[i].resize(size,number);
         }
     }
+    int size(void){
+        return this->number_.size();
+    }
 
+    matrix operator *(int ratio){
+        matrix rtn = *this;
+        for(int i=0;i<rtn.size();++i){
+            for(int j=0;j<rtn.size();++j){
+                rtn[i][j] = this->number_[i][j] * ratio;
+            }
+        }
+        return rtn;
+    }
+    void operator +=(matrix b){
+        if(this->number_.size() != b.size()){
+            cerr << "matrixes' size don't match" <<endl;
+            return;
+        }
+        for(int i=0;i<this->number_.size();++i){
+            for(int j=0;j<this->number_.size();++j){
+                this->number_[i][j] += b[i][j];
+            }
+        }
+    }
 };
 
 class tomo_super_tiff{
 
     string prefix_;
     vector<tomo_tiff> tiffs_;//[z][y][x]
-    vector< vector< vector<float> > > gaussian_window;
-    vector< vector< vector<matrix> > >differential_matrix;
-    vector< vector< vector<matrix> > >tensor;
+    vector< vector< vector<float> > > gaussian_window_;
+    vector< vector< vector<matrix> > >differential_matrix_;
+    vector< vector< vector<matrix> > >tensor_;
 
     void make_gaussian_window_(const int size, const float standard_deviation);
-    void make_differential_matrix();
+    void make_differential_matrix_();
+    void make_tensor_(const int window_size);
     float Ix_(int x, int y, int z);
     float Iy_(int x, int y, int z);
     float Iz_(int x, int y, int z);
