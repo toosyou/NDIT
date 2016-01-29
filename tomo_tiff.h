@@ -59,9 +59,12 @@ public:
     tomo_tiff(const char* address);
 
     void save(const char* address);
-    const vector<float>& operator [](int index_y)const;
+    vector<float>& operator [](int index_y);
     int size(void){return this->gray_scale_.size();}
-
+    void resize(int size){
+        this->gray_scale_.resize(size);
+        this->height_ = size;
+    }
     friend class tomo_super_tiff;
 };
 
@@ -125,7 +128,11 @@ class tomo_super_tiff{
     float Iy_(int x, int y, int z);
     float Iz_(int x, int y, int z);
 
+    float summation_within_window_gaussianed_(int x, int y, int z, int size);
+
 public:
+
+    void down_size(int magnification, const char* save_prefix, float sample_sd = 0.8);
 
     tomo_super_tiff(const char* address_filelist);
     void neuron_detection(const int window_size, const float standard_deviation=0.8);

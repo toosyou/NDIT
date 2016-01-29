@@ -52,6 +52,9 @@ void tomo_tiff::save(const char* address){
         return;
     }
 
+    this->height_ = this->gray_scale_.size();
+    this->width_ = this->gray_scale_[0].size();
+
     TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, this->width_);
     TIFFSetField(tif, TIFFTAG_IMAGELENGTH, this->height_);
 
@@ -87,7 +90,7 @@ void tomo_tiff::save(const char* address){
     return;
 }
 
-const vector<float>& tomo_tiff::operator [](int index_y)const{
+vector<float>& tomo_tiff::operator [](int index_y){
     return this->gray_scale_[index_y];
 }
 
@@ -117,9 +120,9 @@ void tomo_super_tiff::make_gaussian_window_(const int size, const float standard
         for(int j=0;j<size;++j){
             for(int k=0;k<size;++k){
 
-                float fi = (float)i - (float)size / 2.0;
-                float fj = (float)j - (float)size / 2.0;
-                float fk = (float)k - (float)size / 2.0;
+                float fi = (float)i - (float)(size-1) / 2.0;
+                float fj = (float)j - (float)(size-1) / 2.0;
+                float fk = (float)k - (float)(size-1) / 2.0;
 
                 float exp_part = -( fi*fi + fj*fj + fk*fk ) / (standard_deviation*standard_deviation);
                 gaussian_window_[i][j][k] = N * exp(exp_part);
@@ -162,7 +165,6 @@ void tomo_super_tiff::make_gaussian_window_(const int size, const float standard
 
     return;
 }
-
 
 tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
 
@@ -228,6 +230,114 @@ float tomo_super_tiff::Iz_(int x, int y, int z){
         return this->tiffs_[z+1][y][x] - this->tiffs_[z][y][x];
     else
         return ( this->tiffs_[z+1][y][x] - this->tiffs_[z-1][y][x] ) / 2.0;
+}
+
+float tomo_super_tiff::summation_within_window_gaussianed_(int x, int y, int z, int size){
+
+    float summation = 0.0;
+
+    for(int i=0;i<size;++i){ // x
+        for(int j=0;j<size;++j){ // y
+            for(int k=0;k<size;++k){ // z
+
+                int sx = x+i;
+                int sy = y+j;
+                int sz = z+k;
+
+                sz = sz < 0 ? 0 : sz;
+                sy = sy < 0 ? 0 : sy;
+                sx = sx < 0 ? 0 : sx;
+
+                sz = sz >= this->tiffs_.size() ? this->tiffs_.size()-1 : sz;
+                sy = sy >= this->tiffs_[sz].size() ? this->tiffs_[sz].size()-1 : sy;
+                sx = sx >= this->tiffs_[sz][sy].size() ? this->tiffs_[sz][sy].size()-1 : sx;
+
+                summation += this->tiffs_[sz][sy][sx] * this->gaussian_window_[k][j][i];
+            }
+        }
+    }
+
+    return summation;
+}
+
+void tomo_super_tiff::down_size(int magnification, const char *save_prefix, float sample_sd){
+
+    vector< tomo_tiff > result;
+    int process = 0;
+
+    //init
+    cout << "allocting result of down_size..." <<endl;
+    result.resize( this->tiffs_.size()/magnification );
+#pragma omp parallel for
+    for(int i=0;i<result.size();++i){
+        result[i].resize( this->tiffs_[i*magnification].size()/magnification );
+        for(int j=0;j<result[i].size();++j){
+            result[i][j].resize( this->tiffs_[i*magnification][j*magnification].size()/magnification, 0.0 );
+        }
+        cout << process << " / " << result.size() <<endl;
+#pragma omp critical
+        {
+            process++;
+        }
+    }
+    for(int i=0;i<result.size();++i){
+        result[i].bits_per_sample_ = 16;
+        result[i].samples_per_pixel_ = 1;
+    }
+    cout << "\t\tdone!" <<endl;
+
+    //gaussian & sampling
+    cout << "gaussian and sampling..." <<endl;
+
+    this->make_gaussian_window_(magnification, sample_sd*(float)magnification/2.0);
+
+    process = 0;
+#pragma omp parallel for
+    for(int z=0;z<result.size();++z){
+        for(int y=0;y<result[z].size();++y){
+            for(int x=0;x<result[z][y].size();++x){
+
+                int sx = x*magnification;
+                int sy = y*magnification;
+                int sz = z*magnification;
+
+                result[z][y][x] = this->summation_within_window_gaussianed_( sx-magnification/2,
+                                                                             sy-magnification/2,
+                                                                             sz-magnification/2,
+                                                                             magnification);
+            }
+        }
+        cout << process << " / " << result.size() <<endl;
+#pragma omp critical
+        {
+            process++;
+        }
+    }
+    cout << "\t\tdone!" <<endl;
+
+    //save it to save_prefix
+    cout << "saving files..." <<endl;
+    mkdir(save_prefix, 0755);
+
+    process = 0;
+#pragma omp parallel for
+    for(int i=0;i<result.size();++i){
+        //make address
+        char number_string[50]={0};
+        string address(save_prefix);
+        sprintf(number_string,"%d",i);
+        address += string(number_string) + string(".tiff");
+        //save
+        result[i].save( address.c_str() );
+        cout << address << " saved\t\t" << process << " / " << result.size() <<endl;
+#pragma omp critical
+        {
+            process++;
+        }
+    }
+    cout << "\t\tdone!" <<endl;
+
+    return;
 }
 
 void tomo_super_tiff::make_differential_matrix_(){
@@ -374,3 +484,4 @@ void tomo_super_tiff::neuron_detection(const int window_size, const float standa
 
     return;
 }
+
