@@ -188,17 +188,17 @@ tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
     this->prefix_ = string(prefix);
     chdir(prefix);
 
-    int number_done = 0;
+    progressbar *progress = progressbar_new("Reading .tifs",size_tiffs);
     this->tiffs_.resize(size_tiffs);
 #pragma omp parallel for
     for(int i=0;i<size_tiffs;++i){
         tiffs_[i] = tomo_tiff(addresses[i].c_str());
-        cout << "reading " << addresses[i] << "\t\t\tdone!\t\t" << number_done <<endl;
     #pragma omp critical
         {
-            number_done++;
+            progressbar_inc(progress);
         }
     }
+    progressbar_finish(progress);
 
     cout << "change working directory back to " << original_dir <<endl;
     chdir(original_dir);
@@ -343,8 +343,7 @@ void tomo_super_tiff::down_size(int magnification, const char *save_prefix, floa
 void tomo_super_tiff::make_differential_matrix_(){
 
     //init
-    cout << endl << "Initializing, trying to allocate memory..." <<endl ;
-    int process = 0;
+    progressbar *progress = progressbar_new("Initializing",this->tiffs_.size());
     differential_matrix_.resize(this->tiffs_.size());
 #pragma omp parallel for
     for(int i=0;i<differential_matrix_.size();++i){
@@ -352,13 +351,12 @@ void tomo_super_tiff::make_differential_matrix_(){
         for(int j=0;j<differential_matrix_[i].size();++j){
             differential_matrix_[i][j].resize(this->tiffs_[i][j].size(),matrix(3,0));
         }
-        cout << process << " / " << differential_matrix_.size() <<endl;
 #pragma omp critical
         {
-            process++;
+            progressbar_inc(progress);
         }
     }
-    cout << "done!" <<endl;
+    progressbar_finish(progress);
 
     /* differential_matrix      j->
      * __                           __
@@ -370,8 +368,7 @@ void tomo_super_tiff::make_differential_matrix_(){
      * L_                           _|
      */
 
-    cout << "calculating differential matrixes..." <<endl;
-    process = 0;
+    progress = progressbar_new("Calculating...",this->tiffs_.size());
 #pragma omp parallel for
     for(int z=0;z<this->tiffs_.size();++z){
         for(int y=0;y<this->tiffs_[z].size();++y){
@@ -391,39 +388,36 @@ void tomo_super_tiff::make_differential_matrix_(){
                 this_matrix[1][2] = this_matrix[2][1] = Iy*Iz;
             }
         }
-        cout << process << " / " << this->tiffs_.size() <<endl;
 #pragma omp critical
         {
-            process++;
+            progressbar_inc(progress);
         }
     }
+    progressbar_finish(progress);
 }
 
 void tomo_super_tiff::make_tensor_(const int window_size){
 
     //init
-    cout << endl << "Initializing, trying to allocate memory..." <<endl ;
-    int process = 0;
     this->tensor_.resize(this->differential_matrix_.size());
+    progressbar *progress = progressbar_new("Initializing",this->differential_matrix_.size());
 #pragma omp parallel for
     for(int i=0;i<this->tensor_.size();++i){
         this->tensor_[i].resize(this->differential_matrix_[i].size());
         for(int j=0;j<this->tensor_[i].size();++j){
             this->tensor_[i][j].resize(this->differential_matrix_[i][j].size());
         }
-        cout << process << " / " << this->tensor_.size() <<endl;
 #pragma omp critical
         {
-            process++;
+            progressbar_inc(progress);
         }
     }
-    cout << "done!" <<endl;
+    progressbar_finish(progress);
 
     // struct tensor A = sum_u_v_w( gaussian(u,v,w) * differential(u,v,w) )
 
     //for every points
-    cout << "calculating tensor matrixes..." <<endl;
-    process = 0;
+    progress = progressbar_new("Calculating",this->tensor_.size());
 #pragma omp parallel for
     for(int z=0;z<this->tensor_.size();++z){
         for(int y=0;y<this->tensor_[z].size();++y){
@@ -431,9 +425,9 @@ void tomo_super_tiff::make_tensor_(const int window_size){
 
                 matrix temp(3,0);
                 //inside the window
-                for(int k=z-window_size/2;k<z+window_size/2;++k){
-                    for(int j=y-window_size/2;j<y+window_size/2;++j){
-                        for(int i=x-window_size/2;i<x+window_size/2;++i){
+                for(int k=z-window_size/2;k<z+(window_size+1)/2;++k){
+                    for(int j=y-window_size/2;j<y+(window_size+1)/2;++j){
+                        for(int i=x-window_size/2;i<x+(window_size+1)/2;++i){
                             //check boundary
                             if( k < 0 || k >= this->tensor_.size() ||
                                     j < 0 || j >= this->tensor_[k].size() ||
@@ -450,13 +444,89 @@ void tomo_super_tiff::make_tensor_(const int window_size){
                 this->tensor_[z][y][x] = temp;
             }
         }
-        cout << process << " / " << this->tensor_.size() <<endl;
 #pragma omp critical
         {
-            process++;
+            progressbar_inc(progress);
         }
     }
-    cout << "done!" <<endl;
+    progressbar_finish(progress);
+    return;
+}
+
+void tomo_super_tiff::make_nobles_measure_(float measure_constant){
+
+    //init
+
+    this->nobles_measure_.resize( this->tensor_.size() );
+    progressbar *progress = progressbar_new("Initializing", this->tensor_.size());
+#pragma omp parallel for
+    for(int i=0;i<nobles_measure_.size();++i){
+        this->nobles_measure_[i].resize(this->tensor_[i].size());
+        for(int j=0;j<nobles_measure_[i].size();++j){
+            this->nobles_measure_[i][j].resize(this->tensor_[i][j].size(),0.0);
+        }
+#pragma omp critical
+        {
+            progressbar_inc(progress);
+        }
+    }
+    progressbar_finish(progress);
+
+    //calculate measure
+    // Noble's cornor measure :
+    //      Mc = 2* det(tensor) / ( trace(tensor) + c )
+
+    progress = progressbar_new("Calculating",this->nobles_measure_.size());
+#pragma omp parallel for
+    for(int i=0;i<nobles_measure_.size();++i){
+        for(int j=0;j<nobles_measure_[i].size();++j){
+            for(int k=0;k<nobles_measure_[i][j].size();++k){
+                float trace = this->tensor_[i][j][k].trace();
+                this->nobles_measure_[i][j][k] = 2 * this->tensor_[i][j][k].det();
+                this->nobles_measure_[i][j][k] /= trace*trace + measure_constant;
+            }
+        }
+#pragma omp critical
+        {
+            progressbar_inc(progress);
+        }
+    }
+    progressbar_finish(progress);
+
+    //normalize & save
+    mkdir("test",0755);
+    string prefix("./test/");
+
+    progress = progressbar_new("Output for test", this->nobles_measure_.size());
+#pragma omp parallel for
+    for(int i=0;i<nobles_measure_.size();++i){
+        float maximum = 0.0;
+        vector< vector<float> > output(this->nobles_measure_[i]);
+        for(int j=0;j<output.size();++j){
+            for(int k=0;k<output[j].size();++k){
+                maximum = max(maximum, output[j][k]);
+            }
+        }
+        float ratio = 1.0/maximum;
+        for(int j=0;j<output.size();++j){
+            for(int k=0;k<output[j].size();++k){
+                output[j][k] *= ratio;
+            }
+        }
+        char number_string[20]={0};
+        sprintf(number_string,"%d",i);
+        string address = prefix + string(number_string) + string(".tif");
+
+        tomo_tiff output_tiff(output);
+        output_tiff.save(address.c_str());
+
+#pragma omp critical
+        {
+            progressbar_inc(progress);
+        }
+    }
+    progressbar_finish(progress);
+
     return;
 }
 
@@ -468,19 +538,14 @@ void tomo_super_tiff::neuron_detection(const int window_size, const float standa
     this->make_gaussian_window_(window_size,standard_deviation*(float)window_size/2.0);
     cout << "\tdone!"<<endl;
 
-    (cout << "making differential matrix..." ).flush();
+    cout << "making differential matrix..." <<endl;
     this->make_differential_matrix_();
-    cout << "done!"<<endl;
 
-    cout << "cleaning original data...";
-    cout.flush();
-    this->tiffs_.clear();
-    cout << "\t\tdone!";
-
-    cout << "making struct tensor...";
-    cout.flush();
+    cout << "making struct tensor..." <<endl;
     this->make_tensor_(window_size);
-    cout << "\t\tdone!" <<endl;
+
+    cout << "making nobles measures..."<<endl;
+    this->make_nobles_measure_();
 
     return;
 }

@@ -13,6 +13,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+extern "C"{
+    #include <progressbar.h>
+    #include <statusbar.h>
+}
 
 #include <omp.h>
 
@@ -111,6 +115,48 @@ public:
             }
         }
     }
+
+    float det(){
+        if(number_.size() == 3){
+            /*      00      01      02
+             *
+             *      10      11      12
+             *
+             *      20      21      22
+             */
+            float ans = 0.0;
+            ans += number_[0][0] * number_[1][1] * number_[2][2];
+            ans += number_[0][1] * number_[1][2] * number_[2][0];
+            ans += number_[1][0] * number_[2][1] * number_[0][2];
+
+            ans -= number_[0][2] * number_[1][1] * number_[2][0];
+            ans -= number_[0][1] * number_[1][0] * number_[2][2];
+            ans -= number_[0][0] * number_[2][1] * number_[1][2];
+            return ans;
+        }
+        else if(number_.size() == 2){
+            float ans = 0.0;
+            /*      00      01
+             *
+             *      10      11
+             */
+            ans += number_[0][0] * number_[1][1];
+            ans -= number_[0][1] * number_[1][0];
+            return ans;
+        }
+        else{
+            cerr << "matrix size : " << number_.size() << " determine not handled!" <<endl;
+            return 0.0;
+        }
+    }
+
+    float trace(){
+        float ans = 0.0;
+        for(int i=0;i<number_.size();++i){
+            ans += number_[i][i];
+        }
+        return ans;
+    }
 };
 
 class tomo_super_tiff{
@@ -120,10 +166,14 @@ class tomo_super_tiff{
     vector< vector< vector<float> > > gaussian_window_;
     vector< vector< vector<matrix> > >differential_matrix_;
     vector< vector< vector<matrix> > >tensor_;
+    vector< vector< vector<float> > >nobles_measure_;
+    // Noble's cornor measure :
+    //      Mc = 2* det(tensor) / ( trace(tensor) + c )
 
     void make_gaussian_window_(const int size, const float standard_deviation);
     void make_differential_matrix_();
     void make_tensor_(const int window_size);
+    void make_nobles_measure_(float measure_constant = 0.0);
     float Ix_(int x, int y, int z);
     float Iy_(int x, int y, int z);
     float Iz_(int x, int y, int z);

@@ -8,6 +8,8 @@ SOURCES += main.cpp \
 
 INCLUDEPATH += /usr/local/include/
 LIBS += -L/usr/local/lib/ -ltiff
+INCLUDEPATH += progressbar/include/
+LIBS += -Lprogressbar/ -lprogressbar
 
 HEADERS += \
     tomo_tiff.h
