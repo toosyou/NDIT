@@ -202,6 +202,7 @@ tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
 
     cout << "change working directory back to " << original_dir <<endl;
     chdir(original_dir);
+    this->tiffs_[0].save("favicon.tif");
     return;
 }
 
@@ -352,9 +353,7 @@ void tomo_super_tiff::make_differential_matrix_(){
             differential_matrix_[i][j].resize(this->tiffs_[i][j].size(),matrix(3,0));
         }
 #pragma omp critical
-        {
-            progressbar_inc(progress);
-        }
+        progressbar_inc(progress);
     }
     progressbar_finish(progress);
 
@@ -368,7 +367,7 @@ void tomo_super_tiff::make_differential_matrix_(){
      * L_                           _|
      */
 
-    progress = progressbar_new("Calculating...",this->tiffs_.size());
+    progress = progressbar_new("Calculating",this->tiffs_.size());
 #pragma omp parallel for
     for(int z=0;z<this->tiffs_.size();++z){
         for(int y=0;y<this->tiffs_[z].size();++y){
@@ -389,11 +388,11 @@ void tomo_super_tiff::make_differential_matrix_(){
             }
         }
 #pragma omp critical
-        {
-            progressbar_inc(progress);
-        }
+        progressbar_inc(progress);
     }
     progressbar_finish(progress);
+
+    return;
 }
 
 void tomo_super_tiff::make_tensor_(const int window_size){
@@ -408,9 +407,7 @@ void tomo_super_tiff::make_tensor_(const int window_size){
             this->tensor_[i][j].resize(this->differential_matrix_[i][j].size());
         }
 #pragma omp critical
-        {
-            progressbar_inc(progress);
-        }
+        progressbar_inc(progress);
     }
     progressbar_finish(progress);
 
@@ -445,11 +442,10 @@ void tomo_super_tiff::make_tensor_(const int window_size){
             }
         }
 #pragma omp critical
-        {
-            progressbar_inc(progress);
-        }
+        progressbar_inc(progress);
     }
     progressbar_finish(progress);
+
     return;
 }
 
@@ -466,9 +462,7 @@ void tomo_super_tiff::make_nobles_measure_(float measure_constant){
             this->nobles_measure_[i][j].resize(this->tensor_[i][j].size(),0.0);
         }
 #pragma omp critical
-        {
-            progressbar_inc(progress);
-        }
+        progressbar_inc(progress);
     }
     progressbar_finish(progress);
 
@@ -487,43 +481,7 @@ void tomo_super_tiff::make_nobles_measure_(float measure_constant){
             }
         }
 #pragma omp critical
-        {
-            progressbar_inc(progress);
-        }
-    }
-    progressbar_finish(progress);
-
-    //normalize & save
-    mkdir("test",0755);
-    string prefix("./test/");
-
-    progress = progressbar_new("Output for test", this->nobles_measure_.size());
-#pragma omp parallel for
-    for(int i=0;i<nobles_measure_.size();++i){
-        float maximum = 0.0;
-        vector< vector<float> > output(this->nobles_measure_[i]);
-        for(int j=0;j<output.size();++j){
-            for(int k=0;k<output[j].size();++k){
-                maximum = max(maximum, output[j][k]);
-            }
-        }
-        float ratio = 1.0/maximum;
-        for(int j=0;j<output.size();++j){
-            for(int k=0;k<output[j].size();++k){
-                output[j][k] *= ratio;
-            }
-        }
-        char number_string[20]={0};
-        sprintf(number_string,"%d",i);
-        string address = prefix + string(number_string) + string(".tif");
-
-        tomo_tiff output_tiff(output);
-        output_tiff.save(address.c_str());
-
-#pragma omp critical
-        {
-            progressbar_inc(progress);
-        }
+        progressbar_inc(progress);
     }
     progressbar_finish(progress);
 
@@ -550,3 +508,103 @@ void tomo_super_tiff::neuron_detection(const int window_size, const float standa
     return;
 }
 
+void tomo_super_tiff::save_measure(const char *prefix){
+
+    char original_directory[100];
+    getcwd(original_directory,100);
+    mkdir(prefix, 0755);
+    chdir(prefix);
+    cout << "changing working directory to " << prefix <<endl;
+
+    //find maximum of measure
+    float maximum = 0.0;
+    for(int i=0;i<this->nobles_measure_.size();++i){
+        for(int j=0;j<this->nobles_measure_[i].size();++j){
+            for(int k=0;k<this->nobles_measure_[i][j].size();++k){
+                maximum = max(maximum, this->nobles_measure_[i][j][k]);
+            }
+        }
+    }
+
+    //normalize, merge & save
+    progressbar *progress = progressbar_new("Saving",this->nobles_measure_.size());
+#pragma omp parallel for
+    for(int i=0;i<this->nobles_measure_.size();++i){
+        //init, normalize & merge
+        vector< vector<float> > output_image(this->nobles_measure_[i].size());
+        for(int j=0;j<output_image.size();++j){
+            output_image[j].resize(this->nobles_measure_[i][j].size());
+            for(int k=0;k<output_image[j].size();++k){
+                output_image[j][k] = this->nobles_measure_[i][j][k]/maximum ;
+            }
+        }
+        //make address
+        char number_string[50]={0};
+        sprintf(number_string, "%d", i);
+        string address = string(number_string) + string(".tif");
+        //save
+        tomo_tiff output_tiff(output_image);
+        output_tiff.save(address.c_str());
+
+#pragma omp critical
+        progressbar_inc(progress);
+    }
+    progressbar_finish(progress);
+
+    chdir(original_directory);
+    cout << "changing working directory back to " << original_directory <<endl;
+
+    return;
+
+}
+
+void tomo_super_tiff::save_measure_merge(const char *prefix){
+
+    char original_directory[100];
+    getcwd(original_directory,100);
+    mkdir(prefix, 0755);
+    chdir(prefix);
+    cout << "changing working directory to " << prefix <<endl;
+
+    //find maximum of measure
+    float maximum = 0.0;
+    for(int i=0;i<this->nobles_measure_.size();++i){
+        for(int j=0;j<this->nobles_measure_[i].size();++j){
+            for(int k=0;k<this->nobles_measure_[i][j].size();++k){
+                maximum = max(maximum, this->nobles_measure_[i][j][k]);
+            }
+        }
+    }
+
+    //normalize, merge & save
+    progressbar *progress = progressbar_new("Saving",this->nobles_measure_.size());
+#pragma omp parallel for
+    for(int i=0;i<this->nobles_measure_.size();++i){
+        //init, normalize & merge
+        vector< vector<float> > output_image(this->nobles_measure_[i].size());
+        for(int j=0;j<output_image.size();++j){
+            output_image[j].resize(this->nobles_measure_[i][j].size() + this->tiffs_[i][j].size());
+            for(int k=0;k<output_image[j].size();++k){
+                output_image[j][k] = k < this->tiffs_[i][j].size() ?
+                            this->tiffs_[i][j][k] : this->nobles_measure_[i][j][k]/maximum ;
+            }
+        }
+        //making address
+        char number_string[50]={0};
+        sprintf(number_string, "%d", i);
+        string address = string(number_string) + string(".tif");
+
+        //save
+        tomo_tiff output_tiff(output_image);
+        output_tiff.save(address.c_str());
+
+#pragma omp critical
+        progressbar_inc(progress);
+    }
+    progressbar_finish(progress);
+
+    chdir(original_directory);
+    cout << "changing working directory back to " << original_directory <<endl;
+
+    return;
+}

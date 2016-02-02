@@ -95,23 +95,30 @@ public:
         return this->number_.size();
     }
 
-    matrix operator *(int ratio){
-        matrix rtn = *this;
-        for(int i=0;i<rtn.size();++i){
-            for(int j=0;j<rtn.size();++j){
-                rtn[i][j] = this->number_[i][j] * ratio;
+    const matrix& operator =(const matrix& b){
+        this->number_ = b.number_;
+        return *this;
+    }
+
+    matrix operator *(float ratio){
+        matrix rtn;
+        rtn.number_ = this->number_;
+        for(int i=0;i<rtn.number_.size();++i){
+            for(int j=0;j<rtn.number_[i].size();++j){
+                rtn.number_[i][j] = this->number_[i][j] * ratio;
             }
         }
         return rtn;
     }
+
     void operator +=(matrix b){
         if(this->number_.size() != b.size()){
             cerr << "matrixes' size don't match" <<endl;
             return;
         }
         for(int i=0;i<this->number_.size();++i){
-            for(int j=0;j<this->number_.size();++j){
-                this->number_[i][j] += b[i][j];
+            for(int j=0;j<this->number_[i].size();++j){
+                this->number_[i][j] += b.number_[i][j];
             }
         }
     }
@@ -186,6 +193,9 @@ public:
 
     tomo_super_tiff(const char* address_filelist);
     void neuron_detection(const int window_size, const float standard_deviation=0.8);
+
+    void save_measure(const char* prefix);
+    void save_measure_merge(const char* prefix);
 };
 
 #endif // TOMO_TIFF
