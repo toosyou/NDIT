@@ -453,13 +453,13 @@ void tomo_super_tiff::make_nobles_measure_(float measure_constant){
 
     //init
 
-    this->nobles_measure_.resize( this->tensor_.size() );
+    this->measure_.resize( this->tensor_.size() );
     progressbar *progress = progressbar_new("Initializing", this->tensor_.size());
 #pragma omp parallel for
-    for(int i=0;i<nobles_measure_.size();++i){
-        this->nobles_measure_[i].resize(this->tensor_[i].size());
-        for(int j=0;j<nobles_measure_[i].size();++j){
-            this->nobles_measure_[i][j].resize(this->tensor_[i][j].size(),0.0);
+    for(int i=0;i<measure_.size();++i){
+        this->measure_[i].resize(this->tensor_[i].size());
+        for(int j=0;j<measure_[i].size();++j){
+            this->measure_[i][j].resize(this->tensor_[i][j].size(),0.0);
         }
 #pragma omp critical
         progressbar_inc(progress);
@@ -470,14 +470,14 @@ void tomo_super_tiff::make_nobles_measure_(float measure_constant){
     // Noble's cornor measure :
     //      Mc = 2* det(tensor) / ( trace(tensor) + c )
 
-    progress = progressbar_new("Calculating",this->nobles_measure_.size());
+    progress = progressbar_new("Calculating",this->measure_.size());
 #pragma omp parallel for
-    for(int i=0;i<nobles_measure_.size();++i){
-        for(int j=0;j<nobles_measure_[i].size();++j){
-            for(int k=0;k<nobles_measure_[i][j].size();++k){
+    for(int i=0;i<measure_.size();++i){
+        for(int j=0;j<measure_[i].size();++j){
+            for(int k=0;k<measure_[i][j].size();++k){
                 float trace = this->tensor_[i][j][k].trace();
-                this->nobles_measure_[i][j][k] = 2 * this->tensor_[i][j][k].det();
-                this->nobles_measure_[i][j][k] /= trace*trace + measure_constant;
+                this->measure_[i][j][k] = 2 * this->tensor_[i][j][k].det();
+                this->measure_[i][j][k] /= trace*trace + measure_constant;
             }
         }
 #pragma omp critical
@@ -486,6 +486,74 @@ void tomo_super_tiff::make_nobles_measure_(float measure_constant){
     progressbar_finish(progress);
 
     return;
+}
+
+void tomo_super_tiff::make_eigen_values_(){
+    //init
+    this->eigen_values_.resize(this->tensor_.size());
+
+    progressbar *progress = progressbar_new("Initializing",this->eigen_values_.size());
+#pragma omp parallel for
+    for(int i=0;i<this->eigen_values_.size();++i){
+        this->eigen_values_[i].resize( this->tensor_[i].size() );
+        for(int j=0;j<this->eigen_values_[i].size();++j){
+            this->eigen_values_[i][j].resize( this->tensor_[i][j].size() );
+            for(int k=0;k<this->eigen_values_[i][j].size();++k){
+                this->eigen_values_[i][j][k].resize(3,0.0);
+            }
+        }
+#pragma omp critical
+        progressbar_inc(progress);
+    }
+    progressbar_finish(progress);
+
+    //using gsl for eigenvalue
+    progress = progressbar_new("Calculating",this->tensor_.size());
+
+#pragma omp parallel for
+    for(int i=0;i<this->tensor_.size();++i){
+        for(int j=0;j<this->tensor_[i].size();++j){
+            for(int k=0;k<this->tensor_[i][j].size();++k){
+
+                matrix &this_matrix = tensor_[i][j][k];
+
+                //allocate needed
+                gsl_matrix *tensor_matrix = gsl_matrix_alloc(3,3);
+                gsl_vector *eigen_value = gsl_vector_alloc(3);
+                gsl_matrix *eigen_vector = gsl_matrix_alloc(3,3);
+                gsl_eigen_symmv_workspace *w = gsl_eigen_symmv_alloc(3);
+
+                //convert tensor_[i][j][k] to gsl_matrix
+                for(int x=0;x<3;++x){
+                    for(int y=0;y<3;++y){
+                        gsl_matrix_set(tensor_matrix,x,y,this_matrix[x][y]);
+                    }
+                }
+
+                //do the eigenvalue thing
+                gsl_eigen_symmv(tensor_matrix,eigen_value,eigen_vector,w);
+
+                gsl_eigen_symmv_sort(eigen_value,eigen_vector,GSL_EIGEN_SORT_ABS_ASC);
+
+                //save absolute of it to eigen_values_
+                for(int x=0;x<3;++x){
+                    float ev = gsl_vector_get(eigen_value,x);
+                    this->eigen_values_[i][j][k][x] = ev > 0.0 ? ev : -ev;
+                }
+
+                //free everything
+                gsl_matrix_free(tensor_matrix);
+                gsl_matrix_free(eigen_vector);
+                gsl_vector_free(eigen_value);
+                gsl_eigen_symmv_free(w);
+            }
+        }
+#pragma omp critical
+        progressbar_inc(progress);
+    }
+    progressbar_finish(progress);
+
+    return ;
 }
 
 void tomo_super_tiff::neuron_detection(const int window_size, const float standard_deviation){
@@ -502,8 +570,11 @@ void tomo_super_tiff::neuron_detection(const int window_size, const float standa
     cout << "making struct tensor..." <<endl;
     this->make_tensor_(window_size);
 
-    cout << "making nobles measures..."<<endl;
-    this->make_nobles_measure_();
+    //cout << "making nobles measures..."<<endl;
+    //this->make_nobles_measure_();
+
+    cout << "making eigen values..." <<endl;
+    this->make_eigen_values_();
 
     return;
 }
@@ -518,24 +589,24 @@ void tomo_super_tiff::save_measure(const char *prefix){
 
     //find maximum of measure
     float maximum = 0.0;
-    for(int i=0;i<this->nobles_measure_.size();++i){
-        for(int j=0;j<this->nobles_measure_[i].size();++j){
-            for(int k=0;k<this->nobles_measure_[i][j].size();++k){
-                maximum = max(maximum, this->nobles_measure_[i][j][k]);
+    for(int i=0;i<this->measure_.size();++i){
+        for(int j=0;j<this->measure_[i].size();++j){
+            for(int k=0;k<this->measure_[i][j].size();++k){
+                maximum = max(maximum, this->measure_[i][j][k]);
             }
         }
     }
 
     //normalize, merge & save
-    progressbar *progress = progressbar_new("Saving",this->nobles_measure_.size());
+    progressbar *progress = progressbar_new("Saving",this->measure_.size());
 #pragma omp parallel for
-    for(int i=0;i<this->nobles_measure_.size();++i){
+    for(int i=0;i<this->measure_.size();++i){
         //init, normalize & merge
-        vector< vector<float> > output_image(this->nobles_measure_[i].size());
+        vector< vector<float> > output_image(this->measure_[i].size());
         for(int j=0;j<output_image.size();++j){
-            output_image[j].resize(this->nobles_measure_[i][j].size());
+            output_image[j].resize(this->measure_[i][j].size());
             for(int k=0;k<output_image[j].size();++k){
-                output_image[j][k] = this->nobles_measure_[i][j][k]/maximum ;
+                output_image[j][k] = this->measure_[i][j][k]/maximum ;
             }
         }
         //make address
@@ -568,25 +639,25 @@ void tomo_super_tiff::save_measure_merge(const char *prefix){
 
     //find maximum of measure
     float maximum = 0.0;
-    for(int i=0;i<this->nobles_measure_.size();++i){
-        for(int j=0;j<this->nobles_measure_[i].size();++j){
-            for(int k=0;k<this->nobles_measure_[i][j].size();++k){
-                maximum = max(maximum, this->nobles_measure_[i][j][k]);
+    for(int i=0;i<this->measure_.size();++i){
+        for(int j=0;j<this->measure_[i].size();++j){
+            for(int k=0;k<this->measure_[i][j].size();++k){
+                maximum = max(maximum, this->measure_[i][j][k]);
             }
         }
     }
 
     //normalize, merge & save
-    progressbar *progress = progressbar_new("Saving",this->nobles_measure_.size());
+    progressbar *progress = progressbar_new("Saving",this->measure_.size());
 #pragma omp parallel for
-    for(int i=0;i<this->nobles_measure_.size();++i){
+    for(int i=0;i<this->measure_.size();++i){
         //init, normalize & merge
-        vector< vector<float> > output_image(this->nobles_measure_[i].size());
+        vector< vector<float> > output_image(this->measure_[i].size());
         for(int j=0;j<output_image.size();++j){
-            output_image[j].resize(this->nobles_measure_[i][j].size() + this->tiffs_[i][j].size());
+            output_image[j].resize(this->measure_[i][j].size() + this->tiffs_[i][j].size());
             for(int k=0;k<output_image[j].size();++k){
                 output_image[j][k] = k < this->tiffs_[i][j].size() ?
-                            this->tiffs_[i][j][k] : this->nobles_measure_[i][j][k]/maximum ;
+                            this->tiffs_[i][j][k] : this->measure_[i][j][k]/maximum ;
             }
         }
         //making address
@@ -605,6 +676,136 @@ void tomo_super_tiff::save_measure_merge(const char *prefix){
 
     chdir(original_directory);
     cout << "changing working directory back to " << original_directory <<endl;
+
+    return;
+}
+
+void tomo_super_tiff::save_eigen_values_rgb(const char *prefix){
+
+    //find maximum of eigen_values_
+    float maximum = -1.0;
+    for(int i=0;i<this->eigen_values_.size();++i){
+        for(int j=0;j<this->eigen_values_[i].size();++j){
+            for(int k=0;k<this->eigen_values_[i][j].size();++k){
+                for(int m=0;m<this->eigen_values_[i][j][k].size();++m){
+                    maximum = maximum > this->eigen_values_[i][j][k][m] ? maximum : this->eigen_values_[i][j][k][m];
+                }
+            }
+        }
+    }
+
+    //save them
+    char original_dir[100] = {0};
+    mkdir(prefix,0755);
+    getcwd(original_dir,100);
+    chdir(prefix);
+
+#pragma omp parallel for
+    for(int i=0;i<this->eigen_values_.size();++i){
+        //make file name
+        char number_string[50] = {0};
+        sprintf(number_string,"%d",i);
+        string address = string(number_string) + string(".tiff");
+
+        //open file for saving
+        TIFF *tif = TIFFOpen(address.c_str(),"w");
+        if(tif == NULL){
+            cerr << "ERROR : cannot open to save " << prefix << "/" << address <<endl;
+        }
+
+        int height = this->eigen_values_[i].size();
+        int width = this->eigen_values_[i][0].size();
+
+        TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, width);
+        TIFFSetField(tif, TIFFTAG_IMAGELENGTH, height);
+        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 16);
+        TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 3);
+        TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+
+        TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_DEFLATE);
+        TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+
+        vector<uint16_t> tmp_data(width * height * 3);
+        int index_tmp = 0;
+        for(int j=0;j<height;++j){
+            for(int k=0;k<width;++k){
+                for(int m=0;m<this->eigen_values_[i][j][k].size();++m){
+                    tmp_data[index_tmp++] = (uint16_t)(this->eigen_values_[i][j][k][m] / maximum * 65535.0);
+                }
+            }
+        }
+
+        TIFFWriteEncodedStrip(tif, 0, &tmp_data[0], width * height * 6);
+
+        TIFFClose(tif);
+    }
+    chdir(original_dir);
+
+    return;
+}
+
+void tomo_super_tiff::save_eigen_values_rgb_merge(const char *prefix){
+    //find maximum of eigen_values_
+    float maximum = -1.0;
+    for(int i=0;i<this->eigen_values_.size();++i){
+        for(int j=0;j<this->eigen_values_[i].size();++j){
+            for(int k=0;k<this->eigen_values_[i][j].size();++k){
+                for(int m=0;m<this->eigen_values_[i][j][k].size();++m){
+                    maximum = maximum > this->eigen_values_[i][j][k][m] ? maximum : this->eigen_values_[i][j][k][m];
+                }
+            }
+        }
+    }
+
+    //save them
+    char original_dir[100] = {0};
+    mkdir(prefix,0755);
+    getcwd(original_dir,100);
+    chdir(prefix);
+
+#pragma omp parallel for
+    for(int i=0;i<this->eigen_values_.size();++i){
+        //make file name
+        char number_string[50] = {0};
+        sprintf(number_string,"%d",i);
+        string address = string(number_string) + string(".tiff");
+
+        //open file for saving
+        TIFF *tif = TIFFOpen(address.c_str(),"w");
+        if(tif == NULL){
+            cerr << "ERROR : cannot open to save " << prefix << "/" << address <<endl;
+        }
+
+        int width = this->eigen_values_[i].size() + this->tiffs_[i].size();
+        int height = this->eigen_values_[i][0].size();
+
+        TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, width);
+        TIFFSetField(tif, TIFFTAG_IMAGELENGTH, height);
+        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 16);
+        TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 3);
+        TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+
+        TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_DEFLATE);
+        TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+
+        vector<uint16_t> tmp_data(width * height * 3);
+        int index_tmp = 0;
+        for(int j=0;j<height;++j){
+            for(int k=0;k<width;++k){
+                for(int m=0;m<3;++m){
+                    if(k < this->tiffs_[i].size())
+                        tmp_data[index_tmp++] = (uint16_t)(this->tiffs_[i][j][k] * 65535.0);
+                    else
+                        tmp_data[index_tmp++] = (uint16_t)(this->eigen_values_[i][j][k-tiffs_[i].size()][m] / maximum * 65535.0);
+                }
+            }
+        }
+
+        TIFFWriteEncodedStrip(tif, 0, &tmp_data[0], width * height * 6);
+
+        TIFFClose(tif);
+    }
+    chdir(original_dir);
 
     return;
 }

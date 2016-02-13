@@ -1,7 +1,7 @@
 CC=gcc-5
 CXX=g++-5
 INCLUDE=progressbar/include/
-CXXFLAGS=-ltiff -fopenmp -lncurses -I$(INCLUDE) -Lprogressbar/ -lprogressbar
+CXXFLAGS=-ltiff -fopenmp -lncurses -I$(INCLUDE) -Lprogressbar/ -lprogressbar -lgsl -lgslcblas
 
 all: neuron_detection_in_tiff
 

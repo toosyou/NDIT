@@ -13,6 +13,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <gsl/gsl_math.h>
+#include <gsl/gsl_eigen.h>
+
 extern "C"{
     #include <progressbar.h>
     #include <statusbar.h>
@@ -173,7 +176,9 @@ class tomo_super_tiff{
     vector< vector< vector<float> > > gaussian_window_;
     vector< vector< vector<matrix> > >differential_matrix_;
     vector< vector< vector<matrix> > >tensor_;
-    vector< vector< vector<float> > >nobles_measure_;
+    vector< vector< vector<float> > >measure_;
+    vector< vector< vector< vector<float> > > >eigen_values_;
+
     // Noble's cornor measure :
     //      Mc = 2* det(tensor) / ( trace(tensor) + c )
 
@@ -181,6 +186,8 @@ class tomo_super_tiff{
     void make_differential_matrix_();
     void make_tensor_(const int window_size);
     void make_nobles_measure_(float measure_constant = 0.0);
+    void make_eigen_values_();
+
     float Ix_(int x, int y, int z);
     float Iy_(int x, int y, int z);
     float Iz_(int x, int y, int z);
@@ -196,6 +203,8 @@ public:
 
     void save_measure(const char* prefix);
     void save_measure_merge(const char* prefix);
+    void save_eigen_values_rgb(const char* prefix);
+    void save_eigen_values_rgb_merge(const char* prefix);
 };
 
 #endif // TOMO_TIFF
