@@ -205,6 +205,7 @@ public:
     void save_measure_merge(const char* prefix);
     void save_eigen_values_rgb(const char* prefix);
     void save_eigen_values_rgb_merge(const char* prefix);
+    void save_eigen_values_separated(const char* prefix);
 };
 
 #endif // TOMO_TIFF

@@ -809,3 +809,55 @@ void tomo_super_tiff::save_eigen_values_rgb_merge(const char *prefix){
 
     return;
 }
+
+void tomo_super_tiff::save_eigen_values_separated(const char *prefix){
+    //find maximum of eigen_values_
+    float maximum = -1.0;
+    for(int i=0;i<this->eigen_values_.size();++i){
+        for(int j=0;j<this->eigen_values_[i].size();++j){
+            for(int k=0;k<this->eigen_values_[i][j].size();++k){
+                for(int m=0;m<this->eigen_values_[i][j][k].size();++m){
+                    maximum = maximum > this->eigen_values_[i][j][k][m] ? maximum : this->eigen_values_[i][j][k][m];
+                }
+            }
+        }
+    }
+
+    //save them
+    char original_dir[100] = {0};
+    mkdir(prefix,0755);
+    getcwd(original_dir,100);
+    chdir(prefix);
+
+    //ev0
+    for(int t=0;t<3;++t){
+        char original_dir_t[100] = {0};
+        char number_string[50] = {0};
+        sprintf(number_string,"%d",t);
+        mkdir(number_string,0755);
+        getcwd(original_dir_t,100);
+        chdir(number_string);
+
+#pragma omp parallel for
+        for(int i=0;i<this->eigen_values_.size();++i){
+            //make file name
+            sprintf(number_string,"%d",i);
+            string address = string(number_string) + string(".tiff");
+
+            vector< vector<float> > data(this->eigen_values_[i].size());
+            for(int j=0;j<data.size();++j){
+                data[j].resize(this->eigen_values_[i][j].size(),0.0);
+                for(int k=0;k<data[j].size();++k){
+                    data[j][k] = this->eigen_values_[i][j][k][t] / maximum;
+                }
+            }
+
+            tomo_tiff tmp(data);
+            tmp.save(address.c_str());
+        }
+        chdir(original_dir_t);
+    }
+    chdir(original_dir);
+
+    return;
+}
