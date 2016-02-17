@@ -15,5 +15,3 @@ HEADERS += \
     tomo_tiff.h
 
 LIBS += -fopenmp
-
-QMAKE_MAC_SDK = macosx10.10

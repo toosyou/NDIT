@@ -556,6 +556,60 @@ void tomo_super_tiff::make_eigen_values_(){
     return ;
 }
 
+void tomo_super_tiff::experimental_measurement_(float threshold){
+
+    //resize & init
+    this->measure_.resize(this->eigen_values_.size());
+    progressbar *progress = progressbar_new("Initializing", this->measure_.size());
+#pragma omp parallel for
+    for(int i=0;i<this->measure_.size();++i){
+        this->measure_[i].resize(this->eigen_values_[i].size());
+        for(int j=0;j<this->measure_[i].size();++j){
+            this->measure_[i][j].resize(this->eigen_values_[i][j].size(),0.0);
+        }
+#pragma omp critical
+        progressbar_inc(progress);
+    }
+    progressbar_finish(progress);
+
+    //measurement
+    progress = progressbar_new("Calculating",this->measure_.size());
+#pragma omp parallel for
+    for(int i=0;i<this->measure_.size();++i){
+        for(int j=0;j<this->measure_[i].size();++j){
+            for(int k=0;k<this->measure_[i][j].size();++k){
+                vector<float> &ev = this->eigen_values_[i][j][k];
+                measure_[i][j][k] = ev[1] - ev[0];
+            }
+        }
+#pragma omp critical
+        progressbar_inc(progress);
+    }
+    progressbar_finish(progress);
+
+    //normalize
+    float maximum = 0.0;
+    for(int i=0;i<this->measure_.size();++i){
+        for(int j=0;j<this->measure_[i].size();++j){
+            for(int k=0;k<this->measure_[i][j].size();++k){
+                maximum = measure_[i][j][k] > maximum ? measure_[i][j][k] : maximum;
+            }
+        }
+    }
+
+#pragma omp parallel for
+    for(int i=0;i<this->measure_.size();++i){
+        for(int j=0;j<this->measure_[i].size();++j){
+            for(int k=0;k<this->measure_[i][j].size();++k){
+                measure_[i][j][k] /= maximum;
+            }
+        }
+    }
+
+    return ;
+
+}
+
 void tomo_super_tiff::neuron_detection(const int window_size, const float standard_deviation){
 
     cout << "making gaussian window with window_size : " << window_size;
@@ -576,6 +630,9 @@ void tomo_super_tiff::neuron_detection(const int window_size, const float standa
     cout << "making eigen values..." <<endl;
     this->make_eigen_values_();
 
+    cout << "making measurement..." <<endl;
+    this->experimental_measurement_(0.00005 );
+
     return;
 }
 
@@ -587,16 +644,6 @@ void tomo_super_tiff::save_measure(const char *prefix){
     chdir(prefix);
     cout << "changing working directory to " << prefix <<endl;
 
-    //find maximum of measure
-    float maximum = 0.0;
-    for(int i=0;i<this->measure_.size();++i){
-        for(int j=0;j<this->measure_[i].size();++j){
-            for(int k=0;k<this->measure_[i][j].size();++k){
-                maximum = max(maximum, this->measure_[i][j][k]);
-            }
-        }
-    }
-
     //normalize, merge & save
     progressbar *progress = progressbar_new("Saving",this->measure_.size());
 #pragma omp parallel for
@@ -606,7 +653,7 @@ void tomo_super_tiff::save_measure(const char *prefix){
         for(int j=0;j<output_image.size();++j){
             output_image[j].resize(this->measure_[i][j].size());
             for(int k=0;k<output_image[j].size();++k){
-                output_image[j][k] = this->measure_[i][j][k]/maximum ;
+                output_image[j][k] = this->measure_[i][j][k];
             }
         }
         //make address
@@ -637,16 +684,6 @@ void tomo_super_tiff::save_measure_merge(const char *prefix){
     chdir(prefix);
     cout << "changing working directory to " << prefix <<endl;
 
-    //find maximum of measure
-    float maximum = 0.0;
-    for(int i=0;i<this->measure_.size();++i){
-        for(int j=0;j<this->measure_[i].size();++j){
-            for(int k=0;k<this->measure_[i][j].size();++k){
-                maximum = max(maximum, this->measure_[i][j][k]);
-            }
-        }
-    }
-
     //normalize, merge & save
     progressbar *progress = progressbar_new("Saving",this->measure_.size());
 #pragma omp parallel for
@@ -657,7 +694,7 @@ void tomo_super_tiff::save_measure_merge(const char *prefix){
             output_image[j].resize(this->measure_[i][j].size() + this->tiffs_[i][j].size());
             for(int k=0;k<output_image[j].size();++k){
                 output_image[j][k] = k < this->tiffs_[i][j].size() ?
-                            this->tiffs_[i][j][k] : this->measure_[i][j][k]/maximum ;
+                            this->tiffs_[i][j][k] : this->measure_[i][j][k - this->tiffs_[i][j].size()];
             }
         }
         //making address

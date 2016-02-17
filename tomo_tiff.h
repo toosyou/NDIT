@@ -187,6 +187,7 @@ class tomo_super_tiff{
     void make_tensor_(const int window_size);
     void make_nobles_measure_(float measure_constant = 0.0);
     void make_eigen_values_();
+    void experimental_measurement_(float threshold);
 
     float Ix_(int x, int y, int z);
     float Iy_(int x, int y, int z);

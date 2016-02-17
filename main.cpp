@@ -17,12 +17,19 @@ int main(int argc, char **argv){
     //sample.save_measure("result");
     //cout << "saving merged measure..." <<endl;
     //sample.save_measure_merge("result_merged");
+
     cout << "saving eigen value with rgb..." <<endl;
     sample.save_eigen_values_rgb("eigen_value");
+
     cout << "saving eigen value merged with rgb..." <<endl;
     sample.save_eigen_values_rgb_merge("eigen_value_merge");
+
     cout << "saving eigen value separated..."<<endl;
     sample.save_eigen_values_separated("eigen_value_separated");
+
+    cout << "saving measurement..." <<endl;
+    sample.save_measure("measurement");
+    sample.save_measure_merge("measurement_merge");
 
     return 0;
 }
