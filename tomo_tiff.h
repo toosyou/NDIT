@@ -15,6 +15,7 @@
 #include <cmath>
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_eigen.h>
+#include <iomanip>
 
 extern "C"{
     #include <progressbar.h>
@@ -187,7 +188,6 @@ class tomo_super_tiff{
     void make_tensor_(const int window_size);
     void make_nobles_measure_(float measure_constant = 0.0);
     void make_eigen_values_();
-    void experimental_measurement_(float threshold);
 
     float Ix_(int x, int y, int z);
     float Iy_(int x, int y, int z);
@@ -200,6 +200,10 @@ public:
     void down_size(int magnification, const char* save_prefix, float sample_sd = 0.8);
 
     tomo_super_tiff(const char* address_filelist);
+    tomo_super_tiff(){}
+
+    void experimental_measurement(float threshold);
+
     void neuron_detection(const int window_size, const float standard_deviation=0.8);
 
     void save_measure(const char* prefix);
@@ -207,6 +211,9 @@ public:
     void save_eigen_values_rgb(const char* prefix);
     void save_eigen_values_rgb_merge(const char* prefix);
     void save_eigen_values_separated(const char* prefix);
+    void save_eigen_values_ev(const char* address);
+
+    void load_eigen_values_ev(const char* address);
 };
 
 #endif // TOMO_TIFF
