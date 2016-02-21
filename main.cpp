@@ -8,8 +8,13 @@ using namespace std;
 
 void print_usage(void){
     cout << "Usage: " <<endl;
-    cout << "neuron_detection_in_tiff [-e][-w window_size][-t num_threads][-f result_folder_name][-s save_eigen_value_address] address_filelist/address_ev" <<endl;
-    cout << "[-e] Eigen value mode which start from loading .ev file." <<endl;
+    cout << "neuron_detection_in_tiff" <<endl;
+    cout << "[-w window_size]" << endl;
+    cout << "[-t num_threads]" << endl;
+    cout << "[-f result_folder_name]" <<endl;
+    cout << "[-s save_eigen_value_address]" <<endl;
+    cout << "[-e address_ev]" <<endl;
+    cout << "address_filelist" <<endl;
     return;
 }
 
@@ -22,11 +27,13 @@ int main(int argc, char **argv){
     char *address = NULL;
     string folder_name;
     string saving_ev_address;
+    string address_ev;
     //parsing arguments
-    while( (opt = getopt(argc, argv, "ew:t:f:s:")) != -1 ){
+    while( (opt = getopt(argc, argv, "e:w:t:f:s:")) != -1 ){
         switch(opt){
         case 'e':
             mode = EIGEN_VALUE;
+            address_ev = string(optarg);
             break;
 
         case 'w':
@@ -69,7 +76,8 @@ int main(int argc, char **argv){
         sample.neuron_detection(window_size);
     }
     else if(mode == EIGEN_VALUE){
-        sample.load_eigen_values_ev(address);
+        sample = tomo_super_tiff(address);
+        sample.load_eigen_values_ev(address_ev.c_str());
         sample.experimental_measurement(0);
     }
 
@@ -82,7 +90,6 @@ int main(int argc, char **argv){
     }
 
     if(!saving_ev_address.empty()){
-        cout << "saving eigen value ev..." <<endl;
         sample.save_eigen_values_ev(saving_ev_address.c_str());
     }
 

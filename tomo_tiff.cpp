@@ -451,6 +451,8 @@ void tomo_super_tiff::make_tensor_(const int window_size){
 
 void tomo_super_tiff::make_nobles_measure_(float measure_constant){
 
+    cout << "making nobles measures..."<<endl;
+
     //init
 
     this->measure_.resize( this->tensor_.size() );
@@ -489,6 +491,9 @@ void tomo_super_tiff::make_nobles_measure_(float measure_constant){
 }
 
 void tomo_super_tiff::make_eigen_values_(){
+
+    cout << "making eigen values..." <<endl;
+
     //init
     this->eigen_values_.resize(this->tensor_.size());
 
@@ -558,6 +563,8 @@ void tomo_super_tiff::make_eigen_values_(){
 
 void tomo_super_tiff::experimental_measurement(float threshold){
 
+    cout << "making measurement..." <<endl;
+
     //resize & init
     this->measure_.resize(this->eigen_values_.size());
     progressbar *progress = progressbar_new("Initializing", this->measure_.size());
@@ -625,13 +632,8 @@ void tomo_super_tiff::neuron_detection(const int window_size, const float standa
     cout << "making struct tensor..." <<endl;
     this->make_tensor_(window_size);
 
-    //cout << "making nobles measures..."<<endl;
-    //this->make_nobles_measure_();
-
-    cout << "making eigen values..." <<endl;
     this->make_eigen_values_();
 
-    cout << "making measurement..." <<endl;
     this->experimental_measurement(0.00005 );
 
     return;
@@ -902,6 +904,8 @@ void tomo_super_tiff::save_eigen_values_separated(const char *prefix){
 
 void tomo_super_tiff::save_eigen_values_ev(const char *address){
 
+    cout << "saving " << address << "..." <<endl;
+
     fstream out_ev(address, fstream::out);
     if(out_ev.is_open() == false){
         cerr << "ERROR : cannot open " <<address <<endl;
@@ -909,6 +913,7 @@ void tomo_super_tiff::save_eigen_values_ev(const char *address){
     }
 
     //find maximum
+    progressbar *progress = progressbar_new("Maximum",this->eigen_values_.size());
     float maximum = 0.0;
     for(int i=0;i<this->eigen_values_.size();++i){
         for(int j=0;j<this->eigen_values_[i].size();++j){
@@ -918,28 +923,34 @@ void tomo_super_tiff::save_eigen_values_ev(const char *address){
                 }
             }
         }
+        progressbar_inc(progress);
     }
+    progressbar_finish(progress);
 
     out_ev << "exyz-size " << this->eigen_values_[0][0][0].size() << " " << this->eigen_values_[0][0].size() << " " << this->eigen_values_[0].size() << " " << this->eigen_values_.size() <<endl;
-    out_ev << "normalized " << maximum <<endl;
+    out_ev << "normalized " << fixed << setprecision(8) <<  maximum <<endl;
     out_ev << "order xyz"<<endl;
 
+    progress = progressbar_new("Saving",this->eigen_values_.size());
     for(int i=0;i<this->eigen_values_.size();++i){
         for(int j=0;j<this->eigen_values_[i].size();++j){
             for(int k=0;k<this->eigen_values_[i][j].size();++k){
                 for(int m=0;m<this->eigen_values_[i][j][k].size();++m){
                     out_ev << fixed << setprecision(8) << (float)(this->eigen_values_[i][j][k][m]/maximum) << " ";
-                    out_ev.flush();
                 }
             }
         }
+        progressbar_inc(progress);
     }
+    progressbar_finish(progress);
 
     out_ev.close();
     return;
 }
 
 void tomo_super_tiff::load_eigen_values_ev(const char *address){
+
+    cout << "reading " << address << "..." <<endl;
 
     fstream in_ev(address, fstream::in);
     if(in_ev.is_open() == false){
@@ -965,32 +976,40 @@ void tomo_super_tiff::load_eigen_values_ev(const char *address){
     //init
     this->eigen_values_.resize(size_z);
     progressbar *progress = progressbar_new("Initialize",this->eigen_values_.size());
+#pragma omp parallel for
     for(int i=0;i<size_z;++i){
         this->eigen_values_[i].resize(size_y);
         for(int j=0;j<size_y;++j){
             this->eigen_values_[i][j].resize(size_x);
             for(int k=0;k<size_x;++k){
-                this->eigen_values_[i][j][k].resize(size_e);
+                this->eigen_values_[i][j][k].resize(size_e,0.0);
             }
         }
+#pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
 
     //read data
-    progress = progressbar_new("Load",this->eigen_values_.size());
-    for(int i=0;i<this->eigen_values_.size();++i){
-        for(int j=0;j<this->eigen_values_[i].size();++j){
-            for(int k=0;k<this->eigen_values_[i][j].size();++k){
-                for(int m=0;m<this->eigen_values_[i][j][k].size();++m){
-                    in_ev >> this->eigen_values_[i][j][k][m] ;
-                    this->eigen_values_[i][j][k][m] * normalized;
+    progress = progressbar_new("Reading",this->eigen_values_.size());
+    if(order == "xyz"){
+        for(int i=0;i<this->eigen_values_.size();++i){
+            for(int j=0;j<this->eigen_values_[i].size();++j){
+                for(int k=0;k<this->eigen_values_[i][j].size();++k){
+                    for(int m=0;m<this->eigen_values_[i][j][k].size();++m){
+                        in_ev >> this->eigen_values_[i][j][k][m] ;
+                        this->eigen_values_[i][j][k][m] *= normalized;
+                    }
                 }
             }
+            progressbar_inc(progress);
         }
-        progressbar_inc(progress);
+        progressbar_finish(progress);
     }
-    progressbar_finish(progress);
+    else{
+        cout << "ERROR : order " << order << " not handled" <<endl;
+        exit(-1);
+    }
 
     return;
 }
