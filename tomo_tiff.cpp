@@ -1014,3 +1014,144 @@ void tomo_super_tiff::load_eigen_values_ev(const char *address){
     return;
 }
 
+void create_experimental_data(const char *address){
+
+    int size = 200;
+
+    vector< vector< vector<float> > > volumes;
+
+    //init
+    volumes.resize(size);
+#pragma omp parallel for
+    for(int i=0;i<size;++i){
+        volumes[i].resize(size);
+        for(int j=0;j<size;++j){
+            volumes[i][j].resize(size);
+        }
+    }
+
+
+    vector<float> A(3,0.0);
+    A[0] = 9.0; // x
+    A[1] = 20.0; // y
+    A[2] = 20.0; // z
+
+    for(int t=0;t<9;++t){
+
+        int r = 2 + t;
+        A[0] += (float)r;
+
+        vector<float> B(3,0.0);
+        B[0] = A[0]; // x
+        B[1] = 180.0; // y
+        B[2] = 180.0; // z
+
+        vector<float> AB = B - A;
+
+#pragma omp parallel for
+        for(int i=0;i<size;++i){
+            for(int j=0;j<size;++j){
+                for(int k=0;k<size;++k){
+
+                    //create data: cylinder
+                    vector<float> P(3,0.0);
+                    P[0] = (float)k; // x
+                    P[1] = (float)j; // y
+                    P[2] = (float)i; // z
+
+                    vector<float> AP = P - A;
+                    vector<float> BP = P - B;
+                    vector<float> BA = A - B;
+                    float AC_length = vector_dot(AP,AB) / vector_length(AB);
+
+                    //it's in the cylinder
+                    if( vector_dot(AP,AB) > 0.0 && vector_dot(BP,BA) > 0.0 &&
+                            (vector_dot(AP,AP) - AC_length * AC_length) <= ((float)r * (float)r) ){
+                        volumes[i][j][k] = 1.0;
+                    }
+                }
+            }
+        }
+
+        A[0] += (float)r + 9.0;
+    }// for t
+
+    //save volumes
+    char original_directory[100];
+    getcwd(original_directory,100);
+    mkdir(address,0755);
+    chdir(address);
+
+#pragma omp parallel for
+    for(int i=0;i<volumes.size();++i){
+        char filename[20];
+        sprintf(filename, "%d.tif", i);
+
+        tomo_tiff tmp(volumes[i]);
+        tmp.save(filename);
+    }
+
+    //make filelist
+    char filelist_directory[100];
+    getcwd(filelist_directory,100);
+
+    fstream out_filelist("exp.txt",fstream::out);
+
+    out_filelist << volumes.size() <<endl;
+    out_filelist << filelist_directory <<endl;
+
+    for(int i=0;i<volumes.size();++i){
+        char filename[20];
+        sprintf(filename, "%d.tif", i);
+        out_filelist << filename <<endl;
+    }
+    out_filelist.close();
+
+    chdir(original_directory);
+    return;
+}
+
+vector<float> operator -(vector<float> &a, vector<float> &b){
+    if(a.size() != b.size()){
+        cout << "ERROR : vector size not compatible" <<endl;
+        exit(-1);
+    }
+
+    vector<float> result(a.size(),0.0);
+
+    for(int i=0;i<a.size();++i){
+        result[i] = a[i] - b[i];
+    }
+
+    return result;
+
+}
+
+float vector_dot(vector<float> &a, vector<float> &b){
+    if(a.size() != b.size()){
+        cout << "ERROR : vector size not compatible" <<endl;
+        exit(-1);
+    }
+
+    float result = 0.0;
+
+    for(int i=0;i<a.size();++i){
+        result += a[i] * b[i];
+    }
+
+    return result;
+
+}
+
+float vector_length(vector<float> &a){
+
+    float result = 0.0;
+
+    for(int i=0;i<a.size();++i){
+        result += a[i] * a[i];
+    }
+
+    result = pow(result, 0.5);
+
+    return result;
+}

@@ -214,7 +214,14 @@ public:
     void save_eigen_values_ev(const char* address);
 
     void load_eigen_values_ev(const char* address);
+
 };
+
+vector<float> operator -(vector<float> &a, vector<float> &b);
+float vector_dot(vector<float> &a, vector<float> &b);
+float vector_length(vector<float> &a);
+
+void create_experimental_data(const char* address);
 
 #endif // TOMO_TIFF
 

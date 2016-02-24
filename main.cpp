@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <unistd.h>
 
+
 using namespace std;
 
 void print_usage(void){
@@ -14,6 +15,7 @@ void print_usage(void){
     cout << "[-f result_folder_name]" <<endl;
     cout << "[-s save_eigen_value_address]" <<endl;
     cout << "[-e address_ev]" <<endl;
+    cout << "[-d]" <<endl;
     cout << "address_filelist" <<endl;
     return;
 }
@@ -21,7 +23,7 @@ void print_usage(void){
 int main(int argc, char **argv){
 
     int opt = 0;
-    enum{ ORIGINAL_DATA, EIGEN_VALUE } mode = ORIGINAL_DATA;
+    enum{ ORIGINAL_DATA, EIGEN_VALUE, EXPERIMENTAL_DATA } mode = ORIGINAL_DATA;
     int window_size = 5;
     int num_threads = -1;
     char *address = NULL;
@@ -29,7 +31,7 @@ int main(int argc, char **argv){
     string saving_ev_address;
     string address_ev;
     //parsing arguments
-    while( (opt = getopt(argc, argv, "e:w:t:f:s:")) != -1 ){
+    while( (opt = getopt(argc, argv, "e:w:t:f:s:d")) != -1 ){
         switch(opt){
         case 'e':
             mode = EIGEN_VALUE;
@@ -50,6 +52,10 @@ int main(int argc, char **argv){
 
         case 's':
             saving_ev_address = string(optarg);
+            break;
+
+        case 'd':
+            mode = EXPERIMENTAL_DATA;
             break;
 
         default:
@@ -79,6 +85,10 @@ int main(int argc, char **argv){
         sample = tomo_super_tiff(address);
         sample.load_eigen_values_ev(address_ev.c_str());
         sample.experimental_measurement(0);
+    }
+    else if(mode == EXPERIMENTAL_DATA){
+        create_experimental_data(address);
+        return 0;
     }
 
     //save result
