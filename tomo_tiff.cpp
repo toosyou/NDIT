@@ -1030,21 +1030,32 @@ void create_experimental_data(const char *address){
         }
     }
 
+    float rotation_r = 80.0;
 
     vector<float> A(3,0.0);
+    vector<float> C(3,0.0);
     A[0] = 9.0; // x
-    A[1] = 20.0; // y
-    A[2] = 20.0; // z
 
-    for(int t=0;t<11;++t){
+    for(int t=0;t<15;++t){
 
-        float r = 1.0 + (float)t * 0.5;
+        float theta = M_PI / 2.0 / 15.0 * (float)t;
+
+        float r = 2.0;
         A[0] += (float)r;
 
         vector<float> B(3,0.0);
         B[0] = A[0]; // x
-        B[1] = 180.0; // y
-        B[2] = 180.0; // z
+
+        C[0] = A[0]; // x
+        C[1] = 100.0;
+        C[2] = 100.0;
+
+        A[1] = rotation_r * cos(theta) + C[1]; // y
+        A[2] = rotation_r * sin(theta) + C[2]; // z
+
+        B[1] = C[1]*2.0 - A[1]; // y
+        B[2] = C[2]*2.0 - A[2]; // z
+
 
         vector<float> AB = B - A;
 
@@ -1125,6 +1136,21 @@ vector<float> operator -(vector<float> &a, vector<float> &b){
 
     return result;
 
+}
+
+vector<float> operator +(vector<float> &a, vector<float> &b){
+    if(a.size() != b.size()){
+        cout << "ERROR : vector size not compatible" <<endl;
+        exit(-1);
+    }
+
+    vector<float> result(a.size(),0.0);
+
+    for(int i=0;i<a.size();++i){
+        result[i] = a[i] + b[i];
+    }
+
+    return result;
 }
 
 float vector_dot(vector<float> &a, vector<float> &b){
