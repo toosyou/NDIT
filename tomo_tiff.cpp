@@ -586,7 +586,7 @@ void tomo_super_tiff::experimental_measurement(float threshold){
         for(int j=0;j<this->measure_[i].size();++j){
             for(int k=0;k<this->measure_[i][j].size();++k){
                 vector<float> &ev = this->eigen_values_[i][j][k];
-                measure_[i][j][k] = 0.06 * ( ev[0] + ev[1] + ev[2]) * ( ev[0] + ev[1] + ev[2]) - ev[0] * ev[1] * ev[2];
+                measure_[i][j][k] = 0.3 * ( ev[0] + ev[1] + ev[2]) * ( ev[0] + ev[1] + ev[2]) - ev[0] * ev[1] * ev[2];
             }
         }
 #pragma omp critical
@@ -1036,9 +1036,9 @@ void create_experimental_data(const char *address){
     A[1] = 20.0; // y
     A[2] = 20.0; // z
 
-    for(int t=0;t<9;++t){
+    for(int t=0;t<11;++t){
 
-        int r = 2 + t;
+        float r = 1.0 + (float)t * 0.5;
         A[0] += (float)r;
 
         vector<float> B(3,0.0);
