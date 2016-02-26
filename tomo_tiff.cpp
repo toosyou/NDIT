@@ -618,6 +618,241 @@ void tomo_super_tiff::experimental_measurement(float threshold){
 
 }
 
+void tomo_super_tiff::make_differential_matrix_(int start_z, int number_z){
+
+    //init
+    this->differential_matrix_.resize(this->tiffs_.size());
+
+    /* differential_matrix      j->
+     * __                           __
+     * |    IxIx    IxIy    IxIz     |  i
+     * |                             |  |
+     * |    IxIy    IyIy    IyIz     |  v
+     * |                             |
+     * |    IxIz    IyIz    IzIz     |
+     * L_                           _|
+     */
+
+    for(int z=0;z<this->tiffs_.size();++z){
+
+        if( z < start_z || z >= start_z+number_z ){ // clear it because it's not needed
+            this->differential_matrix_[z].clear();
+
+        }
+        else if(this->differential_matrix_[z].size() == 0){ // only calculate one which not calculated before
+
+            //init
+            this->differential_matrix_[z].resize(this->tiffs_[z].size());
+#pragma omp parallel for
+            for(int y=0;y<this->differential_matrix_[z].size();++y){
+                this->differential_matrix_[z][y].resize(this->tiffs_[z][y].size(),matrix(3,0.0));
+            }
+
+            //calculating
+#pragma omp parallel for
+            for(int y=0;y<this->tiffs_[z].size();++y){
+                for(int x=0;x<this->tiffs_[z][y].size();++x){
+
+                    matrix &this_matrix = differential_matrix_[z][y][x];
+                    float Ix = this->Ix_(x,y,z);
+                    float Iy = this->Iy_(x,y,z);
+                    float Iz = this->Iz_(x,y,z);
+
+                    this_matrix[0][0] = Ix*Ix;
+                    this_matrix[1][1] = Iy*Iy;
+                    this_matrix[2][2] = Iz*Iz;
+
+                    this_matrix[0][1] = this_matrix[1][0] = Ix*Iy;
+                    this_matrix[0][2] = this_matrix[2][0] = Ix*Iz;
+                    this_matrix[1][2] = this_matrix[2][1] = Iy*Iz;
+                }
+            }
+        }
+    }
+
+    return;
+}
+
+void tomo_super_tiff::make_tensor_(const int window_size, int start_z, int number_z){
+    //init
+    this->tensor_.resize(this->tiffs_.size());
+
+    // struct tensor A = sum_u_v_w( gaussian(u,v,w) * differential(u,v,w) )
+
+    for(int z=0;z<this->tiffs_.size();++z){
+
+        if( z < start_z || z >= start_z+number_z ){ // clear it because it's not needed
+            this->tensor_[z].clear();
+
+        }
+        else if(this->tensor_[z].size() == 0){ // only calculate one which not calculated before
+
+            //init
+            this->tensor_[z].resize(this->tiffs_[z].size());
+#pragma omp parallel for
+            for(int y=0;y<this->tensor_[z].size();++y){
+                this->tensor_[z][y].resize(this->tiffs_[z][y].size());
+            }
+
+            //calculating
+#pragma omp parallel for
+            for(int y=0;y<this->tiffs_[z].size();++y){
+                for(int x=0;x<this->tiffs_[z][y].size();++x){
+
+                    matrix temp(3,0);
+                    //inside the window
+                    for(int k=z-window_size/2;k<z+(window_size+1)/2;++k){
+                        for(int j=y-window_size/2;j<y+(window_size+1)/2;++j){
+                            for(int i=x-window_size/2;i<x+(window_size+1)/2;++i){
+                                //check boundary
+                                if( k < 0 || k >= this->tensor_.size() ||
+                                        j < 0 || j >= this->tensor_[k].size() ||
+                                        i < 0 || i >= this->tensor_[k][j].size())
+                                    continue;
+                                //sum it up with gaussian ratio
+                                int k_g = k - (z-window_size/2);
+                                int j_g = j - (y-window_size/2);
+                                int i_g = i - (x-window_size/2);
+                                temp += differential_matrix_[k][j][i] * gaussian_window_[k_g][j_g][i_g];
+                            }
+                        }
+                    }
+                    this->tensor_[z][y][x] = temp;
+
+                }
+            }
+        }
+    }
+
+    return;
+}
+
+void tomo_super_tiff::eigen_values_initialize_(){
+
+    //init
+    this->eigen_values_.resize(this->tiffs_.size());
+
+    progressbar *progress = progressbar_new("EigenValueInit",this->eigen_values_.size());
+#pragma omp parallel for
+    for(int i=0;i<this->eigen_values_.size();++i){
+        this->eigen_values_[i].resize( this->tiffs_[i].size() );
+        for(int j=0;j<this->eigen_values_[i].size();++j){
+            this->eigen_values_[i][j].resize( this->tiffs_[i][j].size() );
+            for(int k=0;k<this->eigen_values_[i][j].size();++k){
+                this->eigen_values_[i][j][k].resize(3,0.0);
+            }
+        }
+#pragma omp critical
+        progressbar_inc(progress);
+    }
+    progressbar_finish(progress);
+
+    return;
+}
+
+void tomo_super_tiff::make_eigen_values_(int index_z){
+
+    //using gsl for eigenvalue
+
+#pragma omp parallel for
+    for(int j=0;j<this->tensor_[index_z].size();++j){
+        for(int k=0;k<this->tensor_[index_z][j].size();++k){
+
+            matrix &this_matrix = tensor_[index_z][j][k];
+
+            //allocate needed
+            gsl_matrix *tensor_matrix = gsl_matrix_alloc(3,3);
+            gsl_vector *eigen_value = gsl_vector_alloc(3);
+            gsl_matrix *eigen_vector = gsl_matrix_alloc(3,3);
+            gsl_eigen_symmv_workspace *w = gsl_eigen_symmv_alloc(3);
+
+            //convert tensor_[i][j][k] to gsl_matrix
+            for(int x=0;x<3;++x){
+                for(int y=0;y<3;++y){
+                    gsl_matrix_set(tensor_matrix,x,y,this_matrix[x][y]);
+                }
+            }
+
+            //do the eigenvalue thing
+            gsl_eigen_symmv(tensor_matrix,eigen_value,eigen_vector,w);
+
+            gsl_eigen_symmv_sort(eigen_value,eigen_vector,GSL_EIGEN_SORT_ABS_ASC);
+
+            //save absolute of it to eigen_values_
+            for(int x=0;x<3;++x){
+                float ev = gsl_vector_get(eigen_value,x);
+                this->eigen_values_[index_z][j][k][x] = ev > 0.0 ? ev : -ev;
+            }
+
+            //free everything
+            gsl_matrix_free(tensor_matrix);
+            gsl_matrix_free(eigen_vector);
+            gsl_vector_free(eigen_value);
+            gsl_eigen_symmv_free(w);
+        }
+    }
+
+    return;
+}
+
+void tomo_super_tiff::experimental_measurement_initialize_(){
+
+    //resize & init
+    this->measure_.resize(this->eigen_values_.size());
+    progressbar *progress = progressbar_new("MeasurementInit", this->measure_.size());
+#pragma omp parallel for
+    for(int i=0;i<this->measure_.size();++i){
+        this->measure_[i].resize(this->eigen_values_[i].size());
+        for(int j=0;j<this->measure_[i].size();++j){
+            this->measure_[i][j].resize(this->eigen_values_[i][j].size(),0.0);
+        }
+#pragma omp critical
+        progressbar_inc(progress);
+    }
+    progressbar_finish(progress);
+
+    return;
+}
+
+void tomo_super_tiff::experimental_measurement_normalize_(){
+
+    //normalize
+    float maximum = 0.0;
+    for(int i=0;i<this->measure_.size();++i){
+        for(int j=0;j<this->measure_[i].size();++j){
+            for(int k=0;k<this->measure_[i][j].size();++k){
+                maximum = measure_[i][j][k] > maximum ? measure_[i][j][k] : maximum;
+            }
+        }
+    }
+    cout << "normalized by " << maximum <<endl;
+
+#pragma omp parallel for
+    for(int i=0;i<this->measure_.size();++i){
+        for(int j=0;j<this->measure_[i].size();++j){
+            for(int k=0;k<this->measure_[i][j].size();++k){
+                measure_[i][j][k] /= maximum;
+            }
+        }
+    }
+
+    return;
+}
+
+void tomo_super_tiff::experimental_measurement_(int index_z, float thresholde){
+
+#pragma omp parallel for
+    for(int j=0;j<this->measure_[index_z].size();++j){
+        for(int k=0;k<this->measure_[index_z][j].size();++k){
+            vector<float> &ev = this->eigen_values_[index_z][j][k];
+            measure_[index_z][j][k] = 0.3 * ( ev[0] + ev[1] + ev[2]) * ( ev[0] + ev[1] + ev[2]) - ev[0] * ev[1] * ev[2];
+        }
+    }
+
+
+    return;
+}
+
 void tomo_super_tiff::neuron_detection(const int window_size, const float standard_deviation){
 
     cout << "making gaussian window with window_size : " << window_size;
@@ -626,15 +861,43 @@ void tomo_super_tiff::neuron_detection(const int window_size, const float standa
     this->make_gaussian_window_(window_size,standard_deviation*(float)window_size/2.0);
     cout << "\tdone!"<<endl;
 
-    cout << "making differential matrix..." <<endl;
-    this->make_differential_matrix_();
+    if(this->tiffs_[0].size() < 600){ // prevent starvation
+        cout << "making differential matrix..." <<endl;
+        this->make_differential_matrix_();
 
-    cout << "making struct tensor..." <<endl;
-    this->make_tensor_(window_size);
+        cout << "making struct tensor..." <<endl;
+        this->make_tensor_(window_size);
 
-    this->make_eigen_values_();
+        this->make_eigen_values_();
 
-    this->experimental_measurement(0.00005 );
+        this->experimental_measurement(0.00005 );
+
+    }else{//too large to process
+
+        //init
+        this->eigen_values_initialize_();
+        this->experimental_measurement_initialize_();
+
+        //load data when needed, free it otherwise
+        progressbar *progress = progressbar_new("Calculating",this->tiffs_.size());
+        for(int i=0;i<this->tiffs_.size();++i){
+
+            int number_z = window_size;
+            int start_z = (i - window_size/2) >= 0 ? (i - window_size/2) : 0 ;
+            start_z = (start_z+number_z) <= this->tiffs_.size() ? start_z  : this->tiffs_.size() - number_z;
+
+            this->make_differential_matrix_(start_z, number_z);
+            this->make_tensor_(window_size, start_z, number_z);
+            this->make_eigen_values_(i);
+            this->experimental_measurement_(i, 0.00001);
+
+            progressbar_inc(progress);
+        }
+        progressbar_finish(progress);
+
+        //normalize
+        this->experimental_measurement_normalize_();
+    }
 
     return;
 }

@@ -22,6 +22,7 @@ void print_usage(void){
 
 int main(int argc, char **argv){
 
+    //argument
     int opt = 0;
     enum{ ORIGINAL_DATA, EIGEN_VALUE, EXPERIMENTAL_DATA } mode = ORIGINAL_DATA;
     int window_size = 5;
