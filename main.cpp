@@ -12,10 +12,12 @@ void print_usage(void){
     cout << "neuron_detection_in_tiff" <<endl;
     cout << "[-w window_size]" << endl;
     cout << "[-t num_threads]" << endl;
-    cout << "[-f result_folder_name]" <<endl;
-    cout << "[-s save_eigen_value_address]" <<endl;
-    cout << "[-e address_ev]" <<endl;
-    cout << "[-d]" <<endl;
+    cout << "[-d] create experiment data" <<endl;
+    cout << "*[-f result_folder_name]" <<endl;
+    cout << "*[-s save_eigen_value_address]" <<endl;
+    cout << "*[-e address_ev]" <<endl;
+    cout << "*[-h threshold > 0]" <<endl;
+    cout << "*[-b] bundle magnification" <<endl;
     cout << "address_filelist" <<endl;
     return;
 }
@@ -24,15 +26,17 @@ int main(int argc, char **argv){
 
     //argument
     int opt = 0;
-    enum{ ORIGINAL_DATA, EIGEN_VALUE, EXPERIMENTAL_DATA } mode = ORIGINAL_DATA;
+    enum{ ORIGINAL_DATA, EIGEN_VALUE, EXPERIMENTAL_DATA, BUNDLE } mode = ORIGINAL_DATA;
     int window_size = 5;
     int num_threads = -1;
+    float threshold_measurement = -1.0;
     char *address = NULL;
     string folder_name;
     string saving_ev_address;
     string address_ev;
+
     //parsing arguments
-    while( (opt = getopt(argc, argv, "e:w:t:f:s:d")) != -1 ){
+    while( (opt = getopt(argc, argv, "e:w:t:f:s:dh:b")) != -1 ){
         switch(opt){
         case 'e':
             mode = EIGEN_VALUE;
@@ -59,6 +63,18 @@ int main(int argc, char **argv){
             mode = EXPERIMENTAL_DATA;
             break;
 
+        case 'h':
+            sscanf(optarg,"%f",&threshold_measurement);
+            if(threshold_measurement <= 0){
+                print_usage();
+                exit(-1);
+            }
+            break;
+
+        case 'b':
+            mode = BUNDLE;
+            break;
+
         default:
             print_usage();
             exit(-1);
@@ -76,16 +92,32 @@ int main(int argc, char **argv){
         omp_set_num_threads(num_threads);
     }
 
+    //do the bundle thing
+    if(mode == BUNDLE){
+        if( folder_name.empty() ){
+            folder_name = string(address) + string("x");
+        }
+        if( address_ev.empty() ){
+            address_ev = string("ev_") + string(address) + string("x");
+        }
+        string buffer(address);
+        sprintf(address, "tomo_data_%sx.txt", buffer.c_str());
+
+        cout << "-f " << folder_name <<endl;
+        cout << "-e " << address_ev <<endl;
+        cout << address <<endl;
+    }
+
     //loading & calculating
     tomo_super_tiff sample;
     if(mode == ORIGINAL_DATA){
         sample = tomo_super_tiff(address);
-        sample.neuron_detection(window_size);
+        sample.neuron_detection(window_size, threshold_measurement);
     }
-    else if(mode == EIGEN_VALUE){
+    else if(mode == EIGEN_VALUE || mode == BUNDLE){
         sample = tomo_super_tiff(address);
-        sample.load_eigen_values_ev(address_ev.c_str());
-        sample.experimental_measurement(0);
+        sample.load_eigen_values_separated(address_ev.c_str());
+        sample.experimental_measurement(threshold_measurement);
     }
     else if(mode == EXPERIMENTAL_DATA){
         create_experimental_data(address);

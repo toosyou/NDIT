@@ -16,6 +16,7 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_eigen.h>
 #include <iomanip>
+#include <sstream>
 
 extern "C"{
     #include <progressbar.h>
@@ -213,7 +214,7 @@ public:
 
     void experimental_measurement(float threshold);
 
-    void neuron_detection(const int window_size, const float standard_deviation=0.8);
+    void neuron_detection(const int window_size, float threshold = 0.0001, const float standard_deviation=0.8);
 
     void save_measure(const char* prefix);
     void save_measure_merge(const char* prefix);
@@ -223,6 +224,7 @@ public:
     void save_eigen_values_ev(const char* address);
 
     void load_eigen_values_ev(const char* address);
+    void load_eigen_values_separated(const char* prefix);
 
 };
 
