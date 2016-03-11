@@ -192,7 +192,7 @@ class tomo_super_tiff{
 
     //serial process
     void make_differential_matrix_(int start_z, int number_z);
-    void make_tensor_(const int window_size, int start_z, int number_z);
+    void make_tensor_(const int window_size, int index_z);
     void eigen_values_initialize_();
     void make_eigen_values_(int index_z);
     void experimental_measurement_initialize_();

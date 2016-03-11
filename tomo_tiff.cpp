@@ -679,54 +679,45 @@ void tomo_super_tiff::make_differential_matrix_(int start_z, int number_z){
     return;
 }
 
-void tomo_super_tiff::make_tensor_(const int window_size, int start_z, int number_z){
+void tomo_super_tiff::make_tensor_(const int window_size, int index_z){
     //init
+    this->tensor_.clear();
     this->tensor_.resize(this->tiffs_.size());
 
     // struct tensor A = sum_u_v_w( gaussian(u,v,w) * differential(u,v,w) )
 
-    for(int z=0;z<this->tiffs_.size();++z){
-
-        if( z < start_z || z >= start_z+number_z ){ // clear it because it's not needed
-            this->tensor_[z].clear();
-
-        }
-        else if(this->tensor_[z].size() == 0){ // only calculate one which not calculated before
-
-            //init
-            this->tensor_[z].resize(this->tiffs_[z].size());
+    //init
+    this->tensor_[index_z].resize(this->tiffs_[index_z].size());
 #pragma omp parallel for
-            for(int y=0;y<this->tensor_[z].size();++y){
-                this->tensor_[z][y].resize(this->tiffs_[z][y].size());
-            }
+    for(int y=0;y<this->tensor_[index_z].size();++y){
+        this->tensor_[index_z][y].resize(this->tiffs_[index_z][y].size());
+    }
 
-            //calculating
+    //calculating
 #pragma omp parallel for
-            for(int y=0;y<this->tiffs_[z].size();++y){
-                for(int x=0;x<this->tiffs_[z][y].size();++x){
+    for(int y=0;y<this->tiffs_[index_z].size();++y){
+        for(int x=0;x<this->tiffs_[index_z][y].size();++x){
 
-                    matrix temp(3,0);
-                    //inside the window
-                    for(int k=z-window_size/2;k<z+(window_size+1)/2;++k){
-                        for(int j=y-window_size/2;j<y+(window_size+1)/2;++j){
-                            for(int i=x-window_size/2;i<x+(window_size+1)/2;++i){
-                                //check boundary
-                                if( k < 0 || k >= this->tensor_.size() ||
-                                        j < 0 || j >= this->tensor_[k].size() ||
-                                        i < 0 || i >= this->tensor_[k][j].size())
-                                    continue;
-                                //sum it up with gaussian ratio
-                                int k_g = k - (z-window_size/2);
-                                int j_g = j - (y-window_size/2);
-                                int i_g = i - (x-window_size/2);
-                                temp += differential_matrix_[k][j][i] * gaussian_window_[k_g][j_g][i_g];
-                            }
-                        }
+            matrix temp(3,0);
+            //inside the window
+            for(int k=index_z-window_size/2;k<index_z+(window_size+1)/2;++k){
+                for(int j=y-window_size/2;j<y+(window_size+1)/2;++j){
+                    for(int i=x-window_size/2;i<x+(window_size+1)/2;++i){
+                        //check boundary
+                        if( k < 0 || k >= this->tensor_.size() ||
+                                j < 0 || j >= this->tensor_[k].size() ||
+                                i < 0 || i >= this->tensor_[k][j].size())
+                            continue;
+                        //sum it up with gaussian ratio
+                        int k_g = k - (index_z-window_size/2);
+                        int j_g = j - (y-window_size/2);
+                        int i_g = i - (x-window_size/2);
+                        temp += differential_matrix_[k][j][i] * gaussian_window_[k_g][j_g][i_g];
                     }
-                    this->tensor_[z][y][x] = temp;
-
                 }
             }
+            this->tensor_[index_z][y][x] = temp;
+
         }
     }
 
@@ -901,7 +892,7 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
             start_z = (start_z+number_z) <= this->tiffs_.size() ? start_z  : this->tiffs_.size() - number_z;
 
             this->make_differential_matrix_(start_z, number_z);
-            this->make_tensor_(window_size, start_z, number_z);
+            this->make_tensor_(window_size, i);
             this->make_eigen_values_(i);
             this->experimental_measurement_(i, threshold);
 
