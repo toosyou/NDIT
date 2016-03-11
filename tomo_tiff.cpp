@@ -587,10 +587,12 @@ void tomo_super_tiff::experimental_measurement(float threshold){
             for(int k=0;k<this->measure_[i][j].size();++k){
                 vector<float> &ev = this->eigen_values_[i][j][k];
                 measure_[i][j][k] = 0.3 * ( ev[0] + ev[1] + ev[2]) * ( ev[0] + ev[1] + ev[2]) - ev[0] * ev[1] * ev[2];
-                if( threshold > 0 && measure_[i][j][k] >= threshold )
-                    measure_[i][j][k] = 1.0;
-                else
-                    measure_[i][j][k] = 0.0;
+                if( threshold > 0 ){
+                    if(measure_[i][j][k] >= threshold )
+                        measure_[i][j][k] = 1.0;
+                    else
+                        measure_[i][j][k] = 0.0;
+                }
             }
         }
 #pragma omp critical
@@ -740,8 +742,10 @@ void tomo_super_tiff::eigen_values_initialize_(){
 #pragma omp parallel for
     for(int i=0;i<this->eigen_values_.size();++i){
         this->eigen_values_[i].resize( this->tiffs_[i].size() );
+
         for(int j=0;j<this->eigen_values_[i].size();++j){
             this->eigen_values_[i][j].resize( this->tiffs_[i][j].size() );
+
             for(int k=0;k<this->eigen_values_[i][j].size();++k){
                 this->eigen_values_[i][j][k].resize(3,0.0);
             }
@@ -850,10 +854,12 @@ void tomo_super_tiff::experimental_measurement_(int index_z, float threshold){
         for(int k=0;k<this->measure_[index_z][j].size();++k){
             vector<float> &ev = this->eigen_values_[index_z][j][k];
             measure_[index_z][j][k] = 0.3 * ( ev[0] + ev[1] + ev[2]) * ( ev[0] + ev[1] + ev[2]) - ev[0] * ev[1] * ev[2];
-            if( threshold > 0 && measure_[index_z][j][k] >= threshold )
-                measure_[index_z][j][k] = 1.0;
-            else
-                measure_[index_z][j][k] = 0.0;
+            if( threshold > 0 ){
+                if( measure_[index_z][j][k] >= threshold )
+                    measure_[index_z][j][k] = 1.0;
+                else
+                    measure_[index_z][j][k] = 0.0;
+            }
         }
     }
 

@@ -228,6 +228,7 @@ public:
 
 };
 
+
 vector<float> operator -(vector<float> &a, vector<float> &b);
 vector<float> operator +(vector<float> &a, vector<float> &b);
 float vector_dot(vector<float> &a, vector<float> &b);
