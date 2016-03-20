@@ -915,6 +915,17 @@ void tomo_super_tiff::save_measure(const char *prefix){
     chdir(prefix);
     cout << "changing working directory to " << prefix <<endl;
 
+    //save info.txt
+    fstream out_info("info.txt", fstream::out);
+    if(out_info.is_open() == false){
+        cerr << "ERROR : cannot open info.txt" <<endl;
+        exit(-1);
+    }
+    out_info << "xyz-size " << this->measure_[0][0].size() << " " << this->measure_[0].size() << " " << this->measure_.size() <<endl;
+    out_info << "normalized " << fixed << setprecision(8) << 1.0f <<endl;
+    out_info << "order xyz"<<endl;
+    out_info.close();
+
     //normalize, merge & save
     progressbar *progress = progressbar_new("Saving",this->measure_.size());
 #pragma omp parallel for
@@ -1489,6 +1500,116 @@ void create_experimental_data(const char *address){
     out_filelist.close();
 
     chdir(original_directory);
+    return;
+}
+
+void merge_measurements(const char *address_filelist, const char *prefix_output){
+    vector< vector< vector<float> > > merge_measure;
+    int size_filelist = 0;
+
+    fstream in_filelist(address_filelist, fstream::in);
+    if(!in_filelist.is_open()){
+        cerr << "ERROR : cannot open " << address_filelist <<endl;
+        exit(-1);
+    }
+
+    //read filelist & merge every measurement
+    in_filelist >> size_filelist;
+    for(int t=0;t<size_filelist;++t){
+
+        char original_directory[100] = {0};
+        string buffer_string;
+        string address_measurement;
+        int size_x = 0;
+        int size_y = 0;
+        int size_z = 0;
+        float normalized = 0.0;
+        string order;
+
+        float enlarge_ratio_x = 0.0;
+        float enlarge_ratio_y = 0.0;
+        float enlarge_ratio_z = 0.0;
+
+        in_filelist >> address_measurement;
+
+        //change working directory
+        cout << "changing directory to " << address_measurement << " ..." <<endl;
+        getcwd(original_directory, 100);
+        chdir(address_measurement);
+
+        //read info.txt
+        fstream in_info("info.txt", fstream::in);
+        if(!in_info.is_open()){
+            cerr << "ERROR : cannot open info.txt" <<endl;
+            exit(-1);
+        }
+
+        //xyz-size
+        in_info >> buffer_string >> size_x >> size_y >> size_z;
+        //normalized
+        in_info >> buffer_string >> normalized;
+        //order
+        in_info >> buffer_string >> order; // ignore for now
+        in_info.close();
+
+        //init merge_measure with the size of the first measurement
+        if(t == 0){
+            progressbar *progress = progressbar_new("Initialize", size_z);
+            merge_measure.resize(size_z);
+#pragma omp parallel for
+            for(int i=0;i<size_z;++i){
+                merge_measure[i].resize(size_y);
+                for(int j=0;j<size_y;++j){
+                    merge_measure[i][j].resize(size_x, 0.0);
+                }
+#pragma omp critical
+                progressbar_inc(progress);
+            }
+            progressbar_finish(progress);
+        }
+
+        //calculate enlarge ratio
+        enlarge_ratio_z = (float)merge_measure.size() / (float)size_z;
+        enlarge_ratio_y = (float)merge_measure[0].size() / (float)size_y;
+        enlarge_ratio_x = (float)merge_measure[0][0].size() / (float)size_x;
+
+        //loading .tifs
+        for(int i=0;i<size_z;++i){
+
+            //make address
+            char address_tif[100] = {0};
+            sprintf(address_tif, "%d.tif", i);
+
+            tomo_tiff tif(address_tif);
+            for(int j=0;j<size_y;++j){
+                for(int k=0;k<size_x;++k){
+
+                    int index_z = (int)( enlarge_ratio_z * (float)i );
+                    int index_y = (int)( enlarge_ratio_y * (float)j );
+                    int index_x = (int)( enlarge_ratio_x * (float)k );
+                    float section_width = 0.5/(float)size_filelist;
+                    float section_shift = section_width*2.0*(float)t;
+
+                    //do the bound check
+                    index_z = index_z < merge_measure.size() ? index_z : merge_measure.size()-1 ;
+                    index_y = index_y < merge_measure[0].size() ? index_y : merge_measure[0].size()-1 ;
+                    index_x = index_x < merge_measure[0][0].size() ? index_x : merge_measure[0][0].size()-1 ;
+
+                    //load data into it's own section merge_measure
+                    //                             vvv
+                    //  I--===--I--===--I--===--I--===--I--===--I--===--I--===--I--===--I
+                    //  0.0                                                             1.0
+                    merge_measure[ index_z ][ index_y ][ index_x ] = tif[j][k]/section_width + section_shift;
+                }
+            }
+
+        }
+
+
+        //change directory back to the original one
+        chdir(original_directory);
+    }
+    in_filelist.close();
     return;
 }
 

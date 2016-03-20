@@ -214,7 +214,7 @@ public:
 
     void experimental_measurement(float threshold);
 
-    void neuron_detection(const int window_size, float threshold = 0.0001, const float standard_deviation=0.8);
+    void neuron_detection(const int window_size, float threshold = 0.0000015, const float standard_deviation=0.8);
 
     void save_measure(const char* prefix);
     void save_measure_merge(const char* prefix);
@@ -228,6 +228,7 @@ public:
 
 };
 
+void merge_measurements(const char* address_filelist, const char* prefix_output);
 
 vector<float> operator -(vector<float> &a, vector<float> &b);
 vector<float> operator +(vector<float> &a, vector<float> &b);
