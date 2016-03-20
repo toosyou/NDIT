@@ -1574,6 +1574,11 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         enlarge_ratio_x = (float)merge_measure[0][0].size() / (float)size_x;
 
         //loading .tifs
+        char progress_label[50];
+        sprintf(progress_label, "Loading %d", t);
+        progressbar *progress = progressbar_new(progress_label, size_z);
+
+#pragma omp parallel for
         for(int i=0;i<size_z;++i){
 
             //make address
@@ -1588,7 +1593,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
                     int index_y = (int)( enlarge_ratio_y * (float)j );
                     int index_x = (int)( enlarge_ratio_x * (float)k );
                     float section_width = 0.5/(float)size_filelist;
-                    float section_shift = section_width*2.0*(float)t;
+                    float section_shift = section_width*2.0*(float)t + 0.5*section_width;
 
                     //do the bound check
                     index_z = index_z < merge_measure.size() ? index_z : merge_measure.size()-1 ;
@@ -1599,11 +1604,13 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
                     //                             vvv
                     //  I--===--I--===--I--===--I--===--I--===--I--===--I--===--I--===--I
                     //  0.0                                                             1.0
-                    merge_measure[ index_z ][ index_y ][ index_x ] = tif[j][k]/section_width + section_shift;
+                    merge_measure[ index_z ][ index_y ][ index_x ] += tif[j][k]/section_width + section_shift;
                 }
             }
-
+#pragma omp critical
+            progressbar_inc(progress);
         }
+        progressbar_finish(progress);
 
 
         //change directory back to the original one
