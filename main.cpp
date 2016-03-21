@@ -37,7 +37,7 @@ int main(int argc, char **argv){
     string address_ev;
 
     //parsing arguments
-    while( (opt = getopt(argc, argv, "e:w:t:f:s:dh:bm")) != -1 ){
+    while( (opt = getopt(argc, argv, "e:w:t:f:s:dh:bm:")) != -1 ){
         switch(opt){
         case 'e':
             mode = EIGEN_VALUE;

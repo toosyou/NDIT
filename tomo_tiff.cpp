@@ -1606,7 +1606,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
                     //                             vvv
                     //  I--===--I--===--I--===--I--===--I--===--I--===--I--===--I--===--I
                     //  0.0                                                             1.0
-                    merge_measure[ index_z ][ index_y ][ index_x ] += tif[j][k]/section_width + section_shift;
+                    merge_measure[ index_z ][ index_y ][ index_x ] = tif[j][k]/section_width + section_shift;
                 }
             }
 #pragma omp critical
