@@ -18,6 +18,7 @@ void print_usage(void){
     cout << "*[-e address_ev]" <<endl;
     cout << "*[-h threshold > 0]" <<endl;
     cout << "*[-b] bundle magnification" <<endl;
+    cout << "[-m result_directory] merge measurements" <<endl;
     cout << "address_filelist" <<endl;
     return;
 }
@@ -26,7 +27,7 @@ int main(int argc, char **argv){
 
     //argument
     int opt = 0;
-    enum{ ORIGINAL_DATA, EIGEN_VALUE, EXPERIMENTAL_DATA, BUNDLE } mode = ORIGINAL_DATA;
+    enum{ ORIGINAL_DATA, EIGEN_VALUE, EXPERIMENTAL_DATA, BUNDLE, MERGE } mode = ORIGINAL_DATA;
     int window_size = 5;
     int num_threads = -1;
     float threshold_measurement = -1.0;
@@ -36,7 +37,7 @@ int main(int argc, char **argv){
     string address_ev;
 
     //parsing arguments
-    while( (opt = getopt(argc, argv, "e:w:t:f:s:dh:b")) != -1 ){
+    while( (opt = getopt(argc, argv, "e:w:t:f:s:dh:bm")) != -1 ){
         switch(opt){
         case 'e':
             mode = EIGEN_VALUE;
@@ -73,6 +74,11 @@ int main(int argc, char **argv){
 
         case 'b':
             mode = BUNDLE;
+            break;
+
+        case 'm':
+            mode = MERGE;
+            folder_name = string(optarg);
             break;
 
         default:
@@ -121,6 +127,10 @@ int main(int argc, char **argv){
     }
     else if(mode == EXPERIMENTAL_DATA){
         create_experimental_data(address);
+        return 0;
+    }
+    else if(mode == MERGE){
+        merge_measurements( address, folder_name.c_str() );
         return 0;
     }
 

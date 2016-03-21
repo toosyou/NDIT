@@ -1504,6 +1504,8 @@ void create_experimental_data(const char *address){
 }
 
 void merge_measurements(const char *address_filelist, const char *prefix_output){
+    cout << "Merging measurements..." <<endl;
+
     vector< vector< vector<float> > > merge_measure;
     int size_filelist = 0;
 
@@ -1535,7 +1537,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         //change working directory
         cout << "changing directory to " << address_measurement << " ..." <<endl;
         getcwd(original_directory, 100);
-        chdir(address_measurement);
+        chdir(address_measurement.c_str());
 
         //read info.txt
         fstream in_info("info.txt", fstream::in);
@@ -1612,11 +1614,44 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         }
         progressbar_finish(progress);
 
-
         //change directory back to the original one
         chdir(original_directory);
     }
     in_filelist.close();
+
+    //output merge_measure to prefix_output
+    char original_directory[100] = {0};
+    cout << "change directory to " << prefix_output <<endl;
+    getcwd(original_directory, 100);
+    mkdir(prefix_output, 0755);
+    chdir(prefix_output);
+
+    //save info.txt
+    fstream out_info("info.txt", fstream::out);
+    if(out_info.is_open() == false){
+        cerr << "ERROR : cannot open info.txt" <<endl;
+        exit(-1);
+    }
+    out_info << "xyz-size " << merge_measure[0][0].size() << " " << merge_measure[0].size() << " " << merge_measure.size() <<endl;
+    out_info << "normalized " << fixed << setprecision(8) << 1.0f <<endl;
+    out_info << "order xyz"<<endl;
+    out_info.close();
+
+    progressbar *progress = progressbar_new("Save", merge_measure.size());
+#pragma omp parallel for
+    for(int i=0;i<merge_measure.size();++i){
+        char address_tif[100] = {0};
+        sprintf(address_tif, "%d.tif", i);
+        tomo_tiff tif( merge_measure[i] );
+        tif.save( address_tif );
+
+#pragma omp critical
+        progressbar_inc(progress);
+    }
+    progressbar_finish(progress);
+
+    cout << "change directory back to " << original_directory <<endl;
+    chdir(original_directory);
     return;
 }
 
