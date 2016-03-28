@@ -67,7 +67,7 @@ public:
 
     tomo_tiff(const char* address);
 
-    void save(const char* address);
+    void save(const char* address, int max_gray_scale = 65535);
     vector<float>& operator [](int index_y);
     int size(void){return this->gray_scale_.size();}
     void resize(int size){

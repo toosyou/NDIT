@@ -15,3 +15,5 @@ HEADERS += \
     tomo_tiff.h
 
 LIBS += -fopenmp
+
+QMAKE_CXX = g++-5

@@ -45,7 +45,7 @@ tomo_tiff::tomo_tiff(const char* address){
     return;
 }
 
-void tomo_tiff::save(const char* address){
+void tomo_tiff::save(const char* address, int max_gray_scale ){
     TIFF *tif = TIFFOpen(address, "w");
     if(tif == NULL){
         cerr << "ERROR : cannot create file " << address <<endl;
@@ -75,7 +75,7 @@ void tomo_tiff::save(const char* address){
         vector<uint16_t> data;
         for(unsigned int i=0;i<this->height_;++i){
             for(unsigned int j=0;j<this->width_;++j){
-                data.push_back( gray_scale_[i][j] * 65535.0 );
+                data.push_back( gray_scale_[i][j] * (float)max_gray_scale );
             }
         }
         TIFFWriteEncodedStrip(tif, 0, &data[0], this->height_*this->width_*2);
@@ -1606,7 +1606,21 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
                     //                             vvv
                     //  I--===--I--===--I--===--I--===--I--===--I--===--I--===--I--===--I
                     //  0.0                                                             1.0
-                    merge_measure[ index_z ][ index_y ][ index_x ] = tif[j][k]/section_width + section_shift;
+                    //merge_measure[ index_z ][ index_y ][ index_x ] = tif[j][k]/section_width + section_shift;
+
+                    for(int sz=0;sz<(int)enlarge_ratio_z;++sz){
+                        for(int sy=0;sy<(int)enlarge_ratio_y;++sy){
+                            for(int sx=0;sx<(int)enlarge_ratio_x;++sx){
+
+                                if( index_z-(int)(enlarge_ratio_z/2.0)+sz < 0 || index_z-(int)(enlarge_ratio_z/2.0)+sz >= merge_measure.size() ||
+                                        index_y-(int)(enlarge_ratio_y/2.0)+sy < 0 || index_y-(int)(enlarge_ratio_y/2.0)+sy >= merge_measure[0].size() ||
+                                        index_x-(int)(enlarge_ratio_x/2.0)+sx < 0 || index_x-(int)(enlarge_ratio_x/2.0)+sx >= merge_measure[0][0].size())
+                                    continue;
+
+                                merge_measure[ index_z-(int)(enlarge_ratio_z/2.0)+sz ][ index_y-(int)(enlarge_ratio_y/2.0)+sy ][ index_x-(int)(enlarge_ratio_x/2.0)+sx ] += tif[j][k];
+                            }
+                        }
+                    }
                 }
             }
 #pragma omp critical
@@ -1618,6 +1632,26 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         chdir(original_directory);
     }
     in_filelist.close();
+
+    //normalize
+    float max_merge = -1;
+
+    for(int i=0;i<merge_measure.size();++i){
+        for(int j=0;j<merge_measure[i].size();++j){
+            for(int k=0;k<merge_measure[i][j].size();++k){
+                max_merge = max_merge < merge_measure[i][j][k] ? merge_measure[i][j][k] : max_merge ;
+            }
+        }
+    }
+
+#pragma omp parallel for
+    for(int i=0;i<merge_measure.size();++i){
+        for(int j=0;j<merge_measure[i].size();++j){
+            for(int k=0;k<merge_measure[i][j].size();++k){
+                merge_measure[i][j][k] /= max_merge;
+            }
+        }
+    }
 
     //output merge_measure to prefix_output
     char original_directory[100] = {0};
@@ -1643,7 +1677,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         char address_tif[100] = {0};
         sprintf(address_tif, "%d.tif", i);
         tomo_tiff tif( merge_measure[i] );
-        tif.save( address_tif );
+        tif.save( address_tif, 50000 );
 
 #pragma omp critical
         progressbar_inc(progress);
