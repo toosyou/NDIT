@@ -601,24 +601,7 @@ void tomo_super_tiff::experimental_measurement(float threshold){
     progressbar_finish(progress);
 
     //normalize
-    float maximum = 0.0;
-    for(int i=0;i<this->measure_.size();++i){
-        for(int j=0;j<this->measure_[i].size();++j){
-            for(int k=0;k<this->measure_[i][j].size();++k){
-                maximum = measure_[i][j][k] > maximum ? measure_[i][j][k] : maximum;
-            }
-        }
-    }
-    cout << "normalized by " << maximum <<endl;
-
-#pragma omp parallel for
-    for(int i=0;i<this->measure_.size();++i){
-        for(int j=0;j<this->measure_[i].size();++j){
-            for(int k=0;k<this->measure_[i][j].size();++k){
-                measure_[i][j][k] /= maximum;
-            }
-        }
-    }
+    this->experimental_measurement_normalize_();
 
     return ;
 
@@ -825,6 +808,7 @@ void tomo_super_tiff::experimental_measurement_normalize_(){
         }
     }
     cout << "normalized by " << maximum <<endl;
+    this->normalized_measure_ = maximum;
 
 #pragma omp parallel for
     for(int i=0;i<this->measure_.size();++i){
@@ -922,7 +906,7 @@ void tomo_super_tiff::save_measure(const char *prefix){
         exit(-1);
     }
     out_info << "xyz-size " << this->measure_[0][0].size() << " " << this->measure_[0].size() << " " << this->measure_.size() <<endl;
-    out_info << "normalized " << fixed << setprecision(8) << 1.0f <<endl;
+    out_info << "normalized " << fixed << setprecision(8) << this->normalized_measure_ <<endl;
     out_info << "order xyz"<<endl;
     out_info.close();
 
@@ -1507,6 +1491,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
     cout << "Merging measurements..." <<endl;
 
     vector< vector< vector<float> > > merge_measure;
+    vector< vector< vector<float> > > tmp_measure;
     int size_filelist = 0;
 
     fstream in_filelist(address_filelist, fstream::in);
@@ -1558,11 +1543,28 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         if(t == 0){
             progressbar *progress = progressbar_new("Initialize", size_z);
             merge_measure.resize(size_z);
+            tmp_measure.resize(size_z);
 #pragma omp parallel for
             for(int i=0;i<size_z;++i){
                 merge_measure[i].resize(size_y);
+                tmp_measure[i].resize(size_y);
                 for(int j=0;j<size_y;++j){
                     merge_measure[i][j].resize(size_x, 0.0);
+                    tmp_measure[i][j].resize(size_x, 0.0);
+                }
+#pragma omp critical
+                progressbar_inc(progress);
+            }
+            progressbar_finish(progress);
+
+        }else{//init tmp_measure to zero
+            progressbar *progress = progressbar_new("Zeroing", tmp_measure.size() );
+#pragma omp parallel for
+            for(int i=0;i<tmp_measure.size();++i){
+                for(int j=0;j<tmp_measure[i].size();++j){
+                    for(int k=0;k<tmp_measure[i][j].size();++k){
+                        tmp_measure[i][j][k] = 0.0;
+                    }
                 }
 #pragma omp critical
                 progressbar_inc(progress);
@@ -1575,7 +1577,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         enlarge_ratio_y = (float)merge_measure[0].size() / (float)size_y;
         enlarge_ratio_x = (float)merge_measure[0][0].size() / (float)size_x;
 
-        //loading .tifs
+        //loading .tifs to tmp_measure
         char progress_label[50];
         sprintf(progress_label, "Loading %d", t);
         progressbar *progress = progressbar_new(progress_label, size_z);
@@ -1594,33 +1596,37 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
                     int index_z = (int)( enlarge_ratio_z * (float)i );
                     int index_y = (int)( enlarge_ratio_y * (float)j );
                     int index_x = (int)( enlarge_ratio_x * (float)k );
-                    float section_width = 0.5/(float)size_filelist;
-                    float section_shift = section_width*2.0*(float)t + 0.5*section_width;
-
-                    //do the bound check
-                    index_z = index_z < merge_measure.size() ? index_z : merge_measure.size()-1 ;
-                    index_y = index_y < merge_measure[0].size() ? index_y : merge_measure[0].size()-1 ;
-                    index_x = index_x < merge_measure[0][0].size() ? index_x : merge_measure[0][0].size()-1 ;
-
-                    //load data into it's own section merge_measure
-                    //                             vvv
-                    //  I--===--I--===--I--===--I--===--I--===--I--===--I--===--I--===--I
-                    //  0.0                                                             1.0
-                    //merge_measure[ index_z ][ index_y ][ index_x ] = tif[j][k]/section_width + section_shift;
 
                     for(int sz=0;sz<(int)enlarge_ratio_z;++sz){
                         for(int sy=0;sy<(int)enlarge_ratio_y;++sy){
                             for(int sx=0;sx<(int)enlarge_ratio_x;++sx){
 
-                                if( index_z-(int)(enlarge_ratio_z/2.0)+sz < 0 || index_z-(int)(enlarge_ratio_z/2.0)+sz >= merge_measure.size() ||
-                                        index_y-(int)(enlarge_ratio_y/2.0)+sy < 0 || index_y-(int)(enlarge_ratio_y/2.0)+sy >= merge_measure[0].size() ||
-                                        index_x-(int)(enlarge_ratio_x/2.0)+sx < 0 || index_x-(int)(enlarge_ratio_x/2.0)+sx >= merge_measure[0][0].size())
+                                //boundary check
+                                if( index_z-(int)(enlarge_ratio_z/2.0)+sz < 0 || index_z-(int)(enlarge_ratio_z/2.0)+sz >= tmp_measure.size() ||
+                                        index_y-(int)(enlarge_ratio_y/2.0)+sy < 0 || index_y-(int)(enlarge_ratio_y/2.0)+sy >= tmp_measure[0].size() ||
+                                        index_x-(int)(enlarge_ratio_x/2.0)+sx < 0 || index_x-(int)(enlarge_ratio_x/2.0)+sx >= tmp_measure[0][0].size())
                                     continue;
 
-                                merge_measure[ index_z-(int)(enlarge_ratio_z/2.0)+sz ][ index_y-(int)(enlarge_ratio_y/2.0)+sy ][ index_x-(int)(enlarge_ratio_x/2.0)+sx ] += tif[j][k];
+                                tmp_measure[ index_z-(int)(enlarge_ratio_z/2.0)+sz ][ index_y-(int)(enlarge_ratio_y/2.0)+sy ][ index_x-(int)(enlarge_ratio_x/2.0)+sx ] += tif[j][k]*normalized;
                             }
                         }
                     }
+                }
+            }
+#pragma omp critical
+            progressbar_inc(progress);
+        }
+        progressbar_finish(progress);
+
+        //maxing merge_measure with tmp_measure
+        sprintf(progress_label, "Maxing %d", t);
+        progress = progressbar_new(progress_label, merge_measure.size() );
+
+#pragma omp parallel for
+        for(int i=0;i<merge_measure.size();++i){
+            for(int j=0;j<merge_measure[i].size();++j){
+                for(int k=0;k<merge_measure[i][j].size();++k){
+                    merge_measure[i][j][k] = merge_measure[i][j][k] > tmp_measure[i][j][k] ? merge_measure[i][j][k] : tmp_measure[i][j][k];
                 }
             }
 #pragma omp critical
@@ -1667,7 +1673,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         exit(-1);
     }
     out_info << "xyz-size " << merge_measure[0][0].size() << " " << merge_measure[0].size() << " " << merge_measure.size() <<endl;
-    out_info << "normalized " << fixed << setprecision(8) << 1.0f <<endl;
+    out_info << "normalized " << fixed << setprecision(8) << max_merge <<endl;
     out_info << "order xyz"<<endl;
     out_info.close();
 

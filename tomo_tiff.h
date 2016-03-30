@@ -29,6 +29,15 @@ using namespace std;
 
 class tomo_super_tiff;
 
+void merge_measurements(const char* address_filelist, const char* prefix_output);
+
+vector<float> operator -(vector<float> &a, vector<float> &b);
+vector<float> operator +(vector<float> &a, vector<float> &b);
+float vector_dot(vector<float> &a, vector<float> &b);
+float vector_length(vector<float> &a);
+
+void create_experimental_data(const char* address);
+
 class tomo_tiff{
 
     string address_;
@@ -181,6 +190,8 @@ class tomo_super_tiff{
     vector< vector< vector<float> > >measure_;
     vector< vector< vector< vector<float> > > >eigen_values_;
 
+    float normalized_measure_;
+
     // Noble's cornor measure :
     //      Mc = 2* det(tensor) / ( trace(tensor) + c )
 
@@ -226,16 +237,9 @@ public:
     void load_eigen_values_ev(const char* address);
     void load_eigen_values_separated(const char* prefix);
 
+    //friend void merge_measurements(const char *address_filelist, const char *prefix_output);
+
 };
-
-void merge_measurements(const char* address_filelist, const char* prefix_output);
-
-vector<float> operator -(vector<float> &a, vector<float> &b);
-vector<float> operator +(vector<float> &a, vector<float> &b);
-float vector_dot(vector<float> &a, vector<float> &b);
-float vector_length(vector<float> &a);
-
-void create_experimental_data(const char* address);
 
 #endif // TOMO_TIFF
 
