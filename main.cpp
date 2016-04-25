@@ -119,6 +119,8 @@ int main(int argc, char **argv){
     if(mode == ORIGINAL_DATA){
         sample = tomo_super_tiff(address);
         sample.neuron_detection(window_size, threshold_measurement);
+        if(sample.size_original_data() >= TIFF_IMAGE_LARGE_SIZE) // the data is too large to care the -f & -s arguments save anyway
+            return 0;
     }
     else if(mode == EIGEN_VALUE || mode == BUNDLE){
         sample = tomo_super_tiff(address);

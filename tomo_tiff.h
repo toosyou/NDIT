@@ -25,6 +25,9 @@ extern "C"{
 
 #include <omp.h>
 
+#define TIFF_IMAGE_MEDIUM_SIZE 500
+#define TIFF_IMAGE_LARGE_SIZE 1000
+
 using namespace std;
 
 class tomo_super_tiff;
@@ -83,7 +86,12 @@ public:
         this->gray_scale_.resize(size);
         this->height_ = size;
     }
+    void clear(){
+        this->gray_scale_.clear();
+    }
+
     friend class tomo_super_tiff;
+
 };
 
 class matrix{
@@ -183,6 +191,7 @@ public:
 class tomo_super_tiff{
 
     string prefix_;
+    vector<string> address_tiffs_;
     vector<tomo_tiff> tiffs_;//[z][y][x]
     vector< vector< vector<float> > > gaussian_window_;
     vector< vector< vector<matrix> > >differential_matrix_;
@@ -236,6 +245,7 @@ public:
 
     void load_eigen_values_ev(const char* address);
     void load_eigen_values_separated(const char* prefix);
+    int size_original_data(void){return this->tiffs_.size();}
 
     //friend void merge_measurements(const char *address_filelist, const char *prefix_output);
 

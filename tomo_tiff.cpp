@@ -171,38 +171,44 @@ tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
     fstream in_filelist(address_filelist,fstream::in);
 
     int size_tiffs = -1;
-    vector<string> addresses;
     char prefix[100]={0};
     char original_dir[100]={0};
     getcwd(original_dir,100);
 
     in_filelist >> size_tiffs;
     in_filelist >> prefix;
+
     //read filelist first for parallel
-    addresses.resize(size_tiffs);
-    for(int i=0;i<size_tiffs;++i){
-        in_filelist >> addresses[i];
-    }
-
-    cout << "change working directory to " << prefix <<endl;
-    this->prefix_ = string(prefix);
-    chdir(prefix);
-
-    progressbar *progress = progressbar_new("Reading .tifs",size_tiffs);
     this->tiffs_.resize(size_tiffs);
-#pragma omp parallel for
+    this->address_tiffs_.resize(size_tiffs);
     for(int i=0;i<size_tiffs;++i){
-        tiffs_[i] = tomo_tiff(addresses[i].c_str());
-    #pragma omp critical
-        {
-            progressbar_inc(progress);
-        }
+        in_filelist >> this->address_tiffs_[i];
     }
-    progressbar_finish(progress);
+    this->prefix_ = string(prefix);
 
-    cout << "change working directory back to " << original_dir <<endl;
-    chdir(original_dir);
-    this->tiffs_[0].save("favicon.tif");
+    if(size_tiffs < TIFF_IMAGE_LARGE_SIZE){
+        cout << "change working directory to " << prefix <<endl;
+        chdir(prefix);
+
+        progressbar *progress = progressbar_new("Reading .tifs",size_tiffs);
+#pragma omp parallel for
+        for(int i=0;i<size_tiffs;++i){
+            tiffs_[i] = tomo_tiff(this->address_tiffs_[i].c_str());
+#pragma omp critical
+            {
+                progressbar_inc(progress);
+            }
+        }
+        progressbar_finish(progress);
+
+        cout << "change working directory back to " << original_dir <<endl;
+        chdir(original_dir);
+        this->tiffs_[0].save("favicon.tif");
+
+    }else{
+        cout << "size_tiffs = " << size_tiffs <<endl;
+        cout << "reading address only due to the lack of memory." <<endl;
+    }
     return;
 }
 
@@ -734,8 +740,23 @@ void tomo_super_tiff::eigen_values_initialize_(){
 
 void tomo_super_tiff::make_eigen_values_(int index_z){
 
-    //using gsl for eigenvalue
+    if(this->tiffs_.size() >= TIFF_IMAGE_LARGE_SIZE){ // for the super large data
+        //allocate the needed and free others
+        this->eigen_values_.clear();
+        this->eigen_values_.resize( this->tiffs_.size() );
+        this->eigen_values_[index_z].resize( this->tiffs_[index_z].size() );
 
+#pragma omp for
+        for(int j=0;j<this->eigen_values_[index_z].size();++j){
+            this->eigen_values_[index_z][j].resize( this->tiffs_[index_z][j].size() );
+
+            for(int k=0;k<this->eigen_values_[index_z][j].size();++k){
+                this->eigen_values_[index_z][j][k].resize(3,0.0);
+            }
+        }
+    }
+
+    //using gsl for eigenvalue
 #pragma omp parallel for
     for(int j=0;j<this->tensor_[index_z].size();++j){
         for(int k=0;k<this->tensor_[index_z][j].size();++k){
@@ -824,6 +845,18 @@ void tomo_super_tiff::experimental_measurement_normalize_(){
 
 void tomo_super_tiff::experimental_measurement_(int index_z, float threshold){
 
+    if( this->tiffs_.size() >= TIFF_IMAGE_LARGE_SIZE ){ // for the super large data
+        //allocate the needed and free others
+        this->measure_.clear();
+        this->measure_.resize( this->tiffs_.size() );
+        this->measure_[index_z].resize( this->tiffs_[index_z].size() );
+
+#pragma omp for
+        for(int j=0;j<this->measure_[index_z].size();++j){
+            this->measure_[index_z][j].resize(this->eigen_values_[index_z][j].size(),0.0);
+        }
+    }
+
 #pragma omp parallel for
     for(int j=0;j<this->measure_[index_z].size();++j){
         for(int k=0;k<this->measure_[index_z][j].size();++k){
@@ -850,7 +883,7 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
     this->make_gaussian_window_(window_size,standard_deviation*(float)window_size/2.0);
     cout << "\tdone!"<<endl;
 
-    if(this->tiffs_[0].size() < 600){ // prevent starvation
+    if(this->tiffs_.size() < TIFF_IMAGE_MEDIUM_SIZE){ // prevent starvation
         cout << "making differential matrix..." <<endl;
         this->make_differential_matrix_();
 
@@ -861,7 +894,7 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
 
         this->experimental_measurement( threshold );
 
-    }else{//too large to process
+    }else if(this->tiffs_.size() < TIFF_IMAGE_LARGE_SIZE){//too large to process normally, using half serial processing
 
         //init
         this->eigen_values_initialize_();
@@ -886,6 +919,51 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
 
         //normalize
         this->experimental_measurement_normalize_();
+
+    }else{ //super large, using full serial processing
+
+        vector<float> maximums_eigen_values(this->tiffs_.size(),0.0);
+        vector<float> maximums_measurements(this->tiffs_.size(),0.0);
+
+        //resize eigen value and measurement
+        this->measure_.resize(this->tiffs_.size());
+
+        //load data when needed, free it otherwise
+        progressbar *progress = progressbar_new("Calculating",this->tiffs_.size());
+        for(int i=0;i<this->tiffs_.size();++i){
+
+            int number_z = window_size;
+            int start_z = (i - window_size/2) >= 0 ? (i - window_size/2) : 0 ;
+            start_z = (start_z+number_z) <= this->tiffs_.size() ? start_z  : this->tiffs_.size() - number_z;
+
+            //load original data needed and free it otherwise
+            char original_directory[100] = {0};
+            getcwd(original_directory,100);
+            chdir(this->prefix_.c_str()); // change to the directory of original data
+
+#pragma omp for
+            for(int j=0;j<this->tiffs_.size();++j){
+                if( j < start_z || j >= start_z+number_z ){ // free it
+                    this->tiffs_[j].clear();
+
+                }else if(this->tiffs_[j].size() == 0){ // load it
+                    this->tiffs_[j] = tomo_tiff( this->address_tiffs_[j].c_str() );
+                }
+            }
+            chdir(original_directory);//change it back
+
+            this->make_differential_matrix_(start_z, number_z);
+            this->make_tensor_(window_size, i);
+            this->make_eigen_values_(i);
+            // todo : save eigen_values[i] for tmp. and find maximum
+            this->experimental_measurement_(i, threshold);
+            // todo : save measurements[i] for tmp. and find maximum
+
+            progressbar_inc(progress);
+        }
+        progressbar_finish(progress);
+
+        // todo : normalize the tmp. eigen_values and tmp. measurements
     }
 
     return;
