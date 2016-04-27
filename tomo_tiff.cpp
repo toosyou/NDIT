@@ -957,13 +957,49 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
             this->make_eigen_values_(i);
             // todo : save eigen_values[i] for tmp. and find maximum
             this->experimental_measurement_(i, threshold);
-            // todo : save measurements[i] for tmp. and find maximum
+            // save measurements[i] for tmp. and find maximum for the first normalization
+            for(int j=0;j<this->measure_[i].size();++j){
+                for(int k=0;k<this->measure_[i][j].size();++k){
+                    maximums_measurements[i] = maximums_measurements[i] > this->measure_[i][j][k] ?
+                                maximums_measurements[i] : this->measure_[i][j][k];
+                }
+            }
+#pragma omp for
+            for(int j=0;j<this->measure_[i].size();++j){
+                for(int k=0;k<this->measure_[i][j].size();++k){
+                    this->measure_[i][j][k] /= maximums_measurements[i];
+                }
+            }
+            char address_tiff[100] = {0};
+            mkdir("measurement",0755);
+            sprintf(address_tiff, "measurement/%d.tif", i);
+            tomo_tiff tiff_mearsure(this->measure_[i]);
+            tiff_mearsure.save( address_tiff );
 
             progressbar_inc(progress);
         }
         progressbar_finish(progress);
 
-        // todo : normalize the tmp. eigen_values and tmp. measurements
+        // renormalize the tmp. eigen_values and tmp. measurements
+        // find maximum of maximum
+        float final_maximum_measurements = 0.0;
+        for(int i=0;i<maximums_measurements.size();++i){
+            final_maximum_measurements = final_maximum_measurements > maximums_measurements[i] ?
+                        final_maximum_measurements : maximums_measurements[i];
+        }
+#pragma omp for
+        for(int i=0;i<this->measure_.size();++i){
+            char address_tiff[100] = {0};
+            sprintf(address_tiff, "measurement/%d.tif", i);
+            tomo_tiff tiff_measure(address_tiff);
+            for(int j=0;j<tiff_measure.size();++j){
+                for(int k=0;k<tiff_measure[j].size();++k){
+                    tiff_measure[j][k] *= maximums_measurements[i];
+                    tiff_measure[j][k] /= final_maximum_measurements;
+                }
+            }
+            tiff_measure.save(address_tiff);
+        }
     }
 
     return;
