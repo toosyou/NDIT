@@ -937,10 +937,11 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
             start_z = (start_z+number_z) <= this->tiffs_.size() ? start_z  : this->tiffs_.size() - number_z;
 
             //load original data needed and free it otherwise
+            FILE* err_redir = freopen("tiff_reading_err.txt", "w", stderr);// redirect stderr to err_file
+
             char original_directory[100] = {0};
             getcwd(original_directory,100);
             chdir(this->prefix_.c_str()); // change to the directory of original data
-
 #pragma omp for
             for(int j=0;j<this->tiffs_.size();++j){
                 if( j < start_z-2 || j >= start_z+number_z+2 ){ // free it
@@ -951,6 +952,8 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
                 }
             }
             chdir(original_directory);//change it back
+            fclose(err_redir);
+            freopen("/dev/tty", "a", stderr); // redirect stderr back to screen
 
             this->make_differential_matrix_(start_z, number_z);
             this->make_tensor_(window_size, i);
