@@ -7,6 +7,7 @@ tomo_tiff::tomo_tiff(const char* address){
         return;
     }
 
+    FILE* err_ptr = freopen("tifferr.txt", "a+", stderr);
     TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &this->height_);
     TIFFGetField(tif, TIFFTAG_IMAGEWIDTH,  &this->width_);
     TIFFGetField(tif, TIFFTAG_BITSPERSAMPLE, &this->bits_per_sample_);
@@ -42,6 +43,7 @@ tomo_tiff::tomo_tiff(const char* address){
     delete [] buf;
     TIFFClose(tif);
 
+    fclose(err_ptr);
     return;
 }
 
