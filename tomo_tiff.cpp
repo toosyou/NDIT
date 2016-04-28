@@ -7,7 +7,6 @@ tomo_tiff::tomo_tiff(const char* address){
         return;
     }
 
-    FILE* err_ptr = freopen("tifferr.txt", "a+", stderr);
     TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &this->height_);
     TIFFGetField(tif, TIFFTAG_IMAGEWIDTH,  &this->width_);
     TIFFGetField(tif, TIFFTAG_BITSPERSAMPLE, &this->bits_per_sample_);
@@ -43,7 +42,6 @@ tomo_tiff::tomo_tiff(const char* address){
     delete [] buf;
     TIFFClose(tif);
 
-    fclose(err_ptr);
     return;
 }
 
@@ -945,7 +943,7 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
 
 #pragma omp for
             for(int j=0;j<this->tiffs_.size();++j){
-                if( j < start_z || j >= start_z+number_z ){ // free it
+                if( j < start_z-2 || j >= start_z+number_z+2 ){ // free it
                     this->tiffs_[j].clear();
 
                 }else if(this->tiffs_[j].size() == 0){ // load it
