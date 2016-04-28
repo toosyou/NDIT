@@ -922,7 +922,7 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
 
     }else{ //super large, using full serial processing
 
-        vector<float> maximums_eigen_values(this->tiffs_.size(),0.0);
+        //vector<float> maximums_eigen_values(this->tiffs_.size(),0.0);
         vector<float> maximums_measurements(this->tiffs_.size(),0.0);
 
         //resize eigen value and measurement
@@ -981,12 +981,23 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
         progressbar_finish(progress);
 
         // renormalize the tmp. eigen_values and tmp. measurements
-        // find maximum of maximum
+        // find maximum of maximums
         float final_maximum_measurements = 0.0;
         for(int i=0;i<maximums_measurements.size();++i){
             final_maximum_measurements = final_maximum_measurements > maximums_measurements[i] ?
                         final_maximum_measurements : maximums_measurements[i];
         }
+        //save info.txt
+        fstream out_info("info.txt", fstream::out);
+        if(out_info.is_open() == false){
+            cerr << "ERROR : cannot open info.txt" <<endl;
+            exit(-1);
+        }
+        out_info << "xyz-size " << this->measure_.back().back().size() << " " << this->measure_.back().size() << " " << this->measure_.size() <<endl;
+        out_info << "normalized " << fixed << setprecision(8) << final_maximum_measurements <<endl;
+        out_info << "order xyz"<<endl;
+        out_info.close();
+
 #pragma omp for
         for(int i=0;i<this->measure_.size();++i){
             char address_tiff[100] = {0};
