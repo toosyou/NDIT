@@ -60,7 +60,7 @@ class tomo_tiff{
 
     vector< vector<float> > gray_scale_;
 
-public:
+    public:
 
     tomo_tiff(){
         this->height_ = -1;
@@ -98,7 +98,7 @@ class matrix{
 
     vector< vector<float> > number_;
 
-public:
+    public:
 
     matrix(const int size = 0, const float number = 0.0){
         this->resize(size,number);
@@ -225,7 +225,7 @@ class tomo_super_tiff{
 
     float summation_within_window_gaussianed_(int x, int y, int z, int size);
 
-public:
+    public:
 
     void down_size(int magnification, const char* save_prefix, float sample_sd = 0.8);
 
@@ -252,4 +252,3 @@ public:
 };
 
 #endif // TOMO_TIFF
-

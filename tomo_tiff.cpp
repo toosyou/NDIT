@@ -191,10 +191,10 @@ tomo_super_tiff::tomo_super_tiff(const char *address_filelist){
         chdir(prefix);
 
         progressbar *progress = progressbar_new("Reading .tifs",size_tiffs);
-#pragma omp parallel for
+        #pragma omp parallel for
         for(int i=0;i<size_tiffs;++i){
             tiffs_[i] = tomo_tiff(this->address_tiffs_[i].c_str());
-#pragma omp critical
+            #pragma omp critical
             {
                 progressbar_inc(progress);
             }
@@ -275,14 +275,14 @@ void tomo_super_tiff::down_size(int magnification, const char *save_prefix, floa
     //init
     cout << "allocting result of down_size..." <<endl;
     result.resize( this->tiffs_.size()/magnification );
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<result.size();++i){
         result[i].resize( this->tiffs_[i*magnification].size()/magnification );
         for(int j=0;j<result[i].size();++j){
             result[i][j].resize( this->tiffs_[i*magnification][j*magnification].size()/magnification, 0.0 );
         }
         cout << process << " / " << result.size() <<endl;
-#pragma omp critical
+        #pragma omp critical
         {
             process++;
         }
@@ -299,7 +299,7 @@ void tomo_super_tiff::down_size(int magnification, const char *save_prefix, floa
     this->make_gaussian_window_(magnification, sample_sd*(float)magnification/2.0);
 
     process = 0;
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int z=0;z<result.size();++z){
         for(int y=0;y<result[z].size();++y){
             for(int x=0;x<result[z][y].size();++x){
@@ -315,7 +315,7 @@ void tomo_super_tiff::down_size(int magnification, const char *save_prefix, floa
             }
         }
         cout << process << " / " << result.size() <<endl;
-#pragma omp critical
+        #pragma omp critical
         {
             process++;
         }
@@ -327,7 +327,7 @@ void tomo_super_tiff::down_size(int magnification, const char *save_prefix, floa
     mkdir(save_prefix, 0755);
 
     process = 0;
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<result.size();++i){
         //make address
         char number_string[50]={0};
@@ -337,7 +337,7 @@ void tomo_super_tiff::down_size(int magnification, const char *save_prefix, floa
         //save
         result[i].save( address.c_str() );
         cout << address << " saved\t\t" << process << " / " << result.size() <<endl;
-#pragma omp critical
+        #pragma omp critical
         {
             process++;
         }
@@ -352,13 +352,13 @@ void tomo_super_tiff::make_differential_matrix_(){
     //init
     progressbar *progress = progressbar_new("Initializing",this->tiffs_.size());
     differential_matrix_.resize(this->tiffs_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<differential_matrix_.size();++i){
         this->differential_matrix_[i].resize(this->tiffs_[i].size());
         for(int j=0;j<differential_matrix_[i].size();++j){
             differential_matrix_[i][j].resize(this->tiffs_[i][j].size(),matrix(3,0));
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -374,7 +374,7 @@ void tomo_super_tiff::make_differential_matrix_(){
      */
 
     progress = progressbar_new("Calculating",this->tiffs_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int z=0;z<this->tiffs_.size();++z){
         for(int y=0;y<this->tiffs_[z].size();++y){
             for(int x=0;x<this->tiffs_[z][y].size();++x){
@@ -393,7 +393,7 @@ void tomo_super_tiff::make_differential_matrix_(){
                 this_matrix[1][2] = this_matrix[2][1] = Iy*Iz;
             }
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -406,13 +406,13 @@ void tomo_super_tiff::make_tensor_(const int window_size){
     //init
     this->tensor_.resize(this->differential_matrix_.size());
     progressbar *progress = progressbar_new("Initializing",this->differential_matrix_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->tensor_.size();++i){
         this->tensor_[i].resize(this->differential_matrix_[i].size());
         for(int j=0;j<this->tensor_[i].size();++j){
             this->tensor_[i][j].resize(this->differential_matrix_[i][j].size());
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -421,7 +421,7 @@ void tomo_super_tiff::make_tensor_(const int window_size){
 
     //for every points
     progress = progressbar_new("Calculating",this->tensor_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int z=0;z<this->tensor_.size();++z){
         for(int y=0;y<this->tensor_[z].size();++y){
             for(int x=0;x<this->tensor_[z][y].size();++x){
@@ -447,7 +447,7 @@ void tomo_super_tiff::make_tensor_(const int window_size){
                 this->tensor_[z][y][x] = temp;
             }
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -463,13 +463,13 @@ void tomo_super_tiff::make_nobles_measure_(float measure_constant){
 
     this->measure_.resize( this->tensor_.size() );
     progressbar *progress = progressbar_new("Initializing", this->tensor_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<measure_.size();++i){
         this->measure_[i].resize(this->tensor_[i].size());
         for(int j=0;j<measure_[i].size();++j){
             this->measure_[i][j].resize(this->tensor_[i][j].size(),0.0);
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -479,7 +479,7 @@ void tomo_super_tiff::make_nobles_measure_(float measure_constant){
     //      Mc = 2* det(tensor) / ( trace(tensor) + c )
 
     progress = progressbar_new("Calculating",this->measure_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<measure_.size();++i){
         for(int j=0;j<measure_[i].size();++j){
             for(int k=0;k<measure_[i][j].size();++k){
@@ -488,7 +488,7 @@ void tomo_super_tiff::make_nobles_measure_(float measure_constant){
                 this->measure_[i][j][k] /= trace*trace + measure_constant;
             }
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -504,7 +504,7 @@ void tomo_super_tiff::make_eigen_values_(){
     this->eigen_values_.resize(this->tensor_.size());
 
     progressbar *progress = progressbar_new("Initializing",this->eigen_values_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->eigen_values_.size();++i){
         this->eigen_values_[i].resize( this->tensor_[i].size() );
         for(int j=0;j<this->eigen_values_[i].size();++j){
@@ -513,7 +513,7 @@ void tomo_super_tiff::make_eigen_values_(){
                 this->eigen_values_[i][j][k].resize(3,0.0);
             }
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -521,7 +521,7 @@ void tomo_super_tiff::make_eigen_values_(){
     //using gsl for eigenvalue
     progress = progressbar_new("Calculating",this->tensor_.size());
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->tensor_.size();++i){
         for(int j=0;j<this->tensor_[i].size();++j){
             for(int k=0;k<this->tensor_[i][j].size();++k){
@@ -559,7 +559,7 @@ void tomo_super_tiff::make_eigen_values_(){
                 gsl_eigen_symmv_free(w);
             }
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -574,20 +574,20 @@ void tomo_super_tiff::experimental_measurement(float threshold){
     //resize & init
     this->measure_.resize(this->eigen_values_.size());
     progressbar *progress = progressbar_new("Initializing", this->measure_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->measure_.size();++i){
         this->measure_[i].resize(this->eigen_values_[i].size());
         for(int j=0;j<this->measure_[i].size();++j){
             this->measure_[i][j].resize(this->eigen_values_[i][j].size(),0.0);
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
 
     //measurement
     progress = progressbar_new("Calculating",this->measure_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->measure_.size();++i){
         for(int j=0;j<this->measure_[i].size();++j){
             for(int k=0;k<this->measure_[i][j].size();++k){
@@ -601,7 +601,7 @@ void tomo_super_tiff::experimental_measurement(float threshold){
                 }
             }
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -638,13 +638,13 @@ void tomo_super_tiff::make_differential_matrix_(int start_z, int number_z){
 
             //init
             this->differential_matrix_[z].resize(this->tiffs_[z].size());
-#pragma omp parallel for
+            #pragma omp parallel for
             for(int y=0;y<this->differential_matrix_[z].size();++y){
                 this->differential_matrix_[z][y].resize(this->tiffs_[z][y].size(),matrix(3,0.0));
             }
 
             //calculating
-#pragma omp parallel for
+            #pragma omp parallel for
             for(int y=0;y<this->tiffs_[z].size();++y){
                 for(int x=0;x<this->tiffs_[z][y].size();++x){
 
@@ -677,13 +677,13 @@ void tomo_super_tiff::make_tensor_(const int window_size, int index_z){
 
     //init
     this->tensor_[index_z].resize(this->tiffs_[index_z].size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int y=0;y<this->tensor_[index_z].size();++y){
         this->tensor_[index_z][y].resize(this->tiffs_[index_z][y].size());
     }
 
     //calculating
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int y=0;y<this->tiffs_[index_z].size();++y){
         for(int x=0;x<this->tiffs_[index_z][y].size();++x){
 
@@ -719,7 +719,7 @@ void tomo_super_tiff::eigen_values_initialize_(){
     this->eigen_values_.resize(this->tiffs_.size());
 
     progressbar *progress = progressbar_new("EigenValueInit",this->eigen_values_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->eigen_values_.size();++i){
         this->eigen_values_[i].resize( this->tiffs_[i].size() );
 
@@ -730,7 +730,7 @@ void tomo_super_tiff::eigen_values_initialize_(){
                 this->eigen_values_[i][j][k].resize(3,0.0);
             }
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -746,7 +746,7 @@ void tomo_super_tiff::make_eigen_values_(int index_z){
         this->eigen_values_.resize( this->tiffs_.size() );
         this->eigen_values_[index_z].resize( this->tiffs_[index_z].size() );
 
-#pragma omp for
+        #pragma omp for
         for(int j=0;j<this->eigen_values_[index_z].size();++j){
             this->eigen_values_[index_z][j].resize( this->tiffs_[index_z][j].size() );
 
@@ -757,7 +757,7 @@ void tomo_super_tiff::make_eigen_values_(int index_z){
     }
 
     //using gsl for eigenvalue
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int j=0;j<this->tensor_[index_z].size();++j){
         for(int k=0;k<this->tensor_[index_z][j].size();++k){
 
@@ -803,13 +803,13 @@ void tomo_super_tiff::experimental_measurement_initialize_(){
     //resize & init
     this->measure_.resize(this->eigen_values_.size());
     progressbar *progress = progressbar_new("MeasurementInit", this->measure_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->measure_.size();++i){
         this->measure_[i].resize(this->eigen_values_[i].size());
         for(int j=0;j<this->measure_[i].size();++j){
             this->measure_[i][j].resize(this->eigen_values_[i][j].size(),0.0);
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -831,7 +831,7 @@ void tomo_super_tiff::experimental_measurement_normalize_(){
     cout << "normalized by " << maximum <<endl;
     this->normalized_measure_ = maximum;
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->measure_.size();++i){
         for(int j=0;j<this->measure_[i].size();++j){
             for(int k=0;k<this->measure_[i][j].size();++k){
@@ -851,13 +851,13 @@ void tomo_super_tiff::experimental_measurement_(int index_z, float threshold){
         this->measure_.resize( this->tiffs_.size() );
         this->measure_[index_z].resize( this->tiffs_[index_z].size() );
 
-#pragma omp for
+        #pragma omp for
         for(int j=0;j<this->measure_[index_z].size();++j){
             this->measure_[index_z][j].resize(this->eigen_values_[index_z][j].size(),0.0);
         }
     }
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int j=0;j<this->measure_[index_z].size();++j){
         for(int k=0;k<this->measure_[index_z][j].size();++k){
             vector<float> &ev = this->eigen_values_[index_z][j][k];
@@ -942,7 +942,7 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
             char original_directory[100] = {0};
             getcwd(original_directory,100);
             chdir(this->prefix_.c_str()); // change to the directory of original data
-#pragma omp for
+            #pragma omp for
             for(int j=0;j<this->tiffs_.size();++j){
                 if( j < start_z-2 || j >= start_z+number_z+2 ){ // free it
                     this->tiffs_[j].clear();
@@ -967,7 +967,7 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
                                 maximums_measurements[i] : this->measure_[i][j][k];
                 }
             }
-#pragma omp for
+            #pragma omp for
             for(int j=0;j<this->measure_[i].size();++j){
                 for(int k=0;k<this->measure_[i][j].size();++k){
                     this->measure_[i][j][k] /= maximums_measurements[i];
@@ -1001,7 +1001,7 @@ void tomo_super_tiff::neuron_detection(const int window_size, float threshold, c
         out_info << "order xyz"<<endl;
         out_info.close();
 
-#pragma omp for
+        #pragma omp for
         for(int i=0;i<this->measure_.size();++i){
             char address_tiff[100] = {0};
             sprintf(address_tiff, "measurement/%d.tif", i);
@@ -1040,7 +1040,7 @@ void tomo_super_tiff::save_measure(const char *prefix){
 
     //normalize, merge & save
     progressbar *progress = progressbar_new("Saving",this->measure_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->measure_.size();++i){
         //init, normalize & merge
         vector< vector<float> > output_image(this->measure_[i].size());
@@ -1058,7 +1058,7 @@ void tomo_super_tiff::save_measure(const char *prefix){
         tomo_tiff output_tiff(output_image);
         output_tiff.save(address.c_str());
 
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -1080,7 +1080,7 @@ void tomo_super_tiff::save_measure_merge(const char *prefix){
 
     //normalize, merge & save
     progressbar *progress = progressbar_new("Saving",this->measure_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->measure_.size();++i){
         //init, normalize & merge
         vector< vector<float> > output_image(this->measure_[i].size());
@@ -1100,7 +1100,7 @@ void tomo_super_tiff::save_measure_merge(const char *prefix){
         tomo_tiff output_tiff(output_image);
         output_tiff.save(address.c_str());
 
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -1131,7 +1131,7 @@ void tomo_super_tiff::save_eigen_values_rgb(const char *prefix){
     getcwd(original_dir,100);
     chdir(prefix);
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->eigen_values_.size();++i){
         //make file name
         char number_string[50] = {0};
@@ -1194,7 +1194,7 @@ void tomo_super_tiff::save_eigen_values_rgb_merge(const char *prefix){
     getcwd(original_dir,100);
     chdir(prefix);
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<this->eigen_values_.size();++i){
         //make file name
         char number_string[50] = {0};
@@ -1282,7 +1282,7 @@ void tomo_super_tiff::save_eigen_values_separated(const char *prefix){
         getcwd(original_dir_t,100);
         chdir(number_string);
 
-#pragma omp parallel for
+        #pragma omp parallel for
         for(int i=0;i<this->eigen_values_.size();++i){
             //make file name
             char address[100] = {0};
@@ -1381,7 +1381,7 @@ void tomo_super_tiff::load_eigen_values_ev(const char *address){
     //init
     this->eigen_values_.resize(size_z);
     progressbar *progress = progressbar_new("Initialize",this->eigen_values_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<size_z;++i){
         this->eigen_values_[i].resize(size_y);
         for(int j=0;j<size_y;++j){
@@ -1390,7 +1390,7 @@ void tomo_super_tiff::load_eigen_values_ev(const char *address){
                 this->eigen_values_[i][j][k].resize(size_e,0.0);
             }
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -1459,7 +1459,7 @@ void tomo_super_tiff::load_eigen_values_separated(const char *prefix){
     //init
     this->eigen_values_.resize(size_z);
     progressbar *progress = progressbar_new("Initialize",this->eigen_values_.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<size_z;++i){
         this->eigen_values_[i].resize(size_y);
         for(int j=0;j<size_y;++j){
@@ -1468,7 +1468,7 @@ void tomo_super_tiff::load_eigen_values_separated(const char *prefix){
                 this->eigen_values_[i][j][k].resize(size_e,0.0);
             }
         }
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
@@ -1477,7 +1477,7 @@ void tomo_super_tiff::load_eigen_values_separated(const char *prefix){
     progress = progressbar_new("Reading",this->eigen_values_.size());
     if(order == "xyz"){
 
-#pragma omp parallel for
+        #pragma omp parallel for
         for(int i=0;i<this->eigen_values_.size();++i){
             for(int m=0;m<size_e;++m){
                 char address_tif[100] = {0};
@@ -1491,7 +1491,7 @@ void tomo_super_tiff::load_eigen_values_separated(const char *prefix){
                 }
             }
 
-#pragma omp critical
+            #pragma omp critical
             progressbar_inc(progress);
         }
         progressbar_finish(progress);
@@ -1515,7 +1515,7 @@ void create_experimental_data(const char *address){
 
     //init
     volumes.resize(size);
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<size;++i){
         volumes[i].resize(size);
         for(int j=0;j<size;++j){
@@ -1552,7 +1552,7 @@ void create_experimental_data(const char *address){
 
         vector<float> AB = B - A;
 
-#pragma omp parallel for
+        #pragma omp parallel for
         for(int i=0;i<size;++i){
             for(int j=0;j<size;++j){
                 for(int k=0;k<size;++k){
@@ -1586,7 +1586,7 @@ void create_experimental_data(const char *address){
     mkdir(address,0755);
     chdir(address);
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<volumes.size();++i){
         char filename[20];
         sprintf(filename, "%d.tif", i);
@@ -1672,7 +1672,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
             progressbar *progress = progressbar_new("Initialize", size_z);
             merge_measure.resize(size_z);
             tmp_measure.resize(size_z);
-#pragma omp parallel for
+            #pragma omp parallel for
             for(int i=0;i<size_z;++i){
                 merge_measure[i].resize(size_y);
                 tmp_measure[i].resize(size_y);
@@ -1680,21 +1680,21 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
                     merge_measure[i][j].resize(size_x, 0.0);
                     tmp_measure[i][j].resize(size_x, 0.0);
                 }
-#pragma omp critical
+                #pragma omp critical
                 progressbar_inc(progress);
             }
             progressbar_finish(progress);
 
         }else{//init tmp_measure to zero
             progressbar *progress = progressbar_new("Zeroing", tmp_measure.size() );
-#pragma omp parallel for
+            #pragma omp parallel for
             for(int i=0;i<tmp_measure.size();++i){
                 for(int j=0;j<tmp_measure[i].size();++j){
                     for(int k=0;k<tmp_measure[i][j].size();++k){
                         tmp_measure[i][j][k] = 0.0;
                     }
                 }
-#pragma omp critical
+                #pragma omp critical
                 progressbar_inc(progress);
             }
             progressbar_finish(progress);
@@ -1710,7 +1710,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         sprintf(progress_label, "Loading %d", t);
         progressbar *progress = progressbar_new(progress_label, size_z);
 
-#pragma omp parallel for
+        #pragma omp parallel for
         for(int i=0;i<size_z;++i){
 
             //make address
@@ -1741,7 +1741,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
                     }
                 }
             }
-#pragma omp critical
+            #pragma omp critical
             progressbar_inc(progress);
         }
         progressbar_finish(progress);
@@ -1750,14 +1750,14 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         sprintf(progress_label, "Maxing %d", t);
         progress = progressbar_new(progress_label, merge_measure.size() );
 
-#pragma omp parallel for
+        #pragma omp parallel for
         for(int i=0;i<merge_measure.size();++i){
             for(int j=0;j<merge_measure[i].size();++j){
                 for(int k=0;k<merge_measure[i][j].size();++k){
                     merge_measure[i][j][k] = merge_measure[i][j][k] > tmp_measure[i][j][k] ? merge_measure[i][j][k] : tmp_measure[i][j][k];
                 }
             }
-#pragma omp critical
+            #pragma omp critical
             progressbar_inc(progress);
         }
         progressbar_finish(progress);
@@ -1778,7 +1778,7 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
         }
     }
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<merge_measure.size();++i){
         for(int j=0;j<merge_measure[i].size();++j){
             for(int k=0;k<merge_measure[i][j].size();++k){
@@ -1806,14 +1806,14 @@ void merge_measurements(const char *address_filelist, const char *prefix_output)
     out_info.close();
 
     progressbar *progress = progressbar_new("Save", merge_measure.size());
-#pragma omp parallel for
+    #pragma omp parallel for
     for(int i=0;i<merge_measure.size();++i){
         char address_tif[100] = {0};
         sprintf(address_tif, "%d.tif", i);
         tomo_tiff tif( merge_measure[i] );
         tif.save( address_tif, 50000 );
 
-#pragma omp critical
+        #pragma omp critical
         progressbar_inc(progress);
     }
     progressbar_finish(progress);
